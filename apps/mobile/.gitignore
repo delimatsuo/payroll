@@ -39,3 +39,14 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase/Google config files - NEVER COMMIT
+# These contain API keys and project identifiers
+# Use google-services.json.example as template
+google-services.json
+GoogleService-Info.plist
+
+# Environment
+.env
+.env.local
+.env.production

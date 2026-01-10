@@ -42,7 +42,23 @@ Thumbs.db
 # Firebase
 .firebase/
 firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Firebase/Google config files - NEVER COMMIT THESE
+google-services.json
+GoogleService-Info.plist
+**/google-services.json
+**/GoogleService-Info.plist
 
 # GCP
 gcloud-service-key.json
 *-service-account.json
+*service-account*.json
+*.keyfile.json
+
+# API Keys and Secrets
+*.pem
+*.key
+secrets/
+.secrets/

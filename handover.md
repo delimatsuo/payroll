@@ -1,6 +1,6 @@
 # Escala Simples - AI Agent Handover Document
 
-**Last Updated:** January 9, 2026
+**Last Updated:** January 9, 2026 (Evening)
 **Project:** Escala Simples - Scheduling System for Brazilian Restaurants & Retail
 **Status:** In Development (MVP Phase)
 
@@ -97,6 +97,15 @@ EMPLOYEE: "Tell us when you can't work, swap with colleagues."
 3. **Firestore Indexes** - Deployed required composite indexes for queries
 
 4. **React Version Resolution** - Fixed monorepo React version conflicts
+
+5. **Security Fix (Jan 9, 2026)** - Fixed leaked Firebase API keys:
+   - Removed `google-services.json` and `GoogleService-Info.plist` from git tracking
+   - Updated `.gitignore` to block Firebase config files
+   - Added pre-commit hook to detect secrets before commit
+   - Deleted compromised API keys via `gcloud` CLI
+   - Regenerated fresh Firebase configs
+   - Created `apps/mobile/FIREBASE_SETUP.md` with setup instructions
+   - Created `.example` template files for new developers
 
 ---
 
@@ -378,6 +387,9 @@ Key indexes already deployed:
 | `apps/mobile/src/services/api.ts` | API client |
 | `apps/mobile/src/hooks/useEstablishment.tsx` | Establishment state |
 | `apps/mobile/src/hooks/useEmployeeAuth.tsx` | Employee auth hook |
+| `apps/mobile/FIREBASE_SETUP.md` | Firebase config setup instructions |
+| `apps/mobile/google-services.json.example` | Android Firebase config template |
+| `apps/mobile/GoogleService-Info.plist.example` | iOS Firebase config template |
 
 ---
 
