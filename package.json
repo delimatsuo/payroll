@@ -1,0 +1,33 @@
+{
+  "name": "escala-simples",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestão de escala de trabalho para restaurantes e lojas",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run dev --workspace=apps/mobile",
+    "dev:api": "npm run dev --workspace=services/api",
+    "build:mobile": "npm run build --workspace=apps/mobile",
+    "build:api": "npm run build --workspace=services/api",
+    "deploy:api": "npm run deploy --workspace=services/api",
+    "deploy:functions": "npm run deploy --workspace=services/functions",
+    "test": "npm run test --workspaces --if-present",
+    "test:llm": "npm run test:llm --workspace=services/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "overrides": {
+    "react": "19.1.0"
+  }
+}

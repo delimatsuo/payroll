@@ -1,0 +1,1101 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Configuração Inicial do Projeto e Infraestrutura GCP",
+        "description": "Configurar o ambiente de desenvolvimento React Native com Expo, estabelecer a infraestrutura inicial no Google Cloud Platform (GCP) incluindo Cloud Run, Firestore, Cloud Functions e Cloud Tasks, e definir os esquemas de dados iniciais no Firestore.",
+        "details": "1. Criar projeto React Native com Expo. 2. Configurar o GCP: Criar projeto, habilitar APIs (Cloud Run, Firestore, Cloud Functions, Cloud Tasks, Gemini API). 3. Configurar Firestore: Criar coleções iniciais para Manager, Establishment, Employee, Schedule, Shift, SwapRequest, WhatsAppMessage conforme o Modelo de Dados (Seção 3.1). 4. Configurar Firebase Auth para autenticação de telefone e Firebase Cloud Messaging para notificações push. 5. Integrar Twilio para SMS fallback, se necessário, para códigos de verificação. 6. Definir regras de segurança iniciais no Firestore.",
+        "testStrategy": "Verificar se o projeto React Native compila e roda. Validar a criação e acessibilidade das coleções no Firestore. Testar a implantação de uma função simples no Cloud Run e Cloud Functions. Confirmar a configuração básica do Firebase Auth.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Configurar Projeto React Native com Expo",
+            "description": "Criar um novo projeto React Native usando o CLI do Expo e verificar sua funcionalidade básica para estabelecer o ambiente de desenvolvimento.",
+            "dependencies": [],
+            "details": "Utilizar o comando 'npx create-expo-app nome-do-projeto' para inicializar o projeto. Instalar quaisquer dependências iniciais necessárias. Testar a compilação e execução do aplicativo em um emulador ou dispositivo físico para garantir que o ambiente está funcionando corretamente.",
+            "status": "done",
+            "testStrategy": "Verificar se o projeto React Native compila sem erros e se o aplicativo é executado com sucesso em um emulador/dispositivo, exibindo a tela inicial padrão do Expo.",
+            "updatedAt": "2025-12-28T16:03:35.296Z",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Configurar Projeto GCP e Habilitar APIs Essenciais",
+            "description": "Criar um novo projeto no Google Cloud Platform e habilitar todas as APIs necessárias para a infraestrutura de backend, incluindo Cloud Run, Firestore, Cloud Functions, Cloud Tasks e Gemini API.",
+            "dependencies": [
+              1
+            ],
+            "details": "Criar um novo projeto GCP através do console do Google Cloud ou utilizando a ferramenta gcloud CLI. Navegar até a seção 'APIs e Serviços' e habilitar as APIs de Cloud Run Admin API, Cloud Firestore API, Cloud Functions API, Cloud Tasks API, Firebase Management API e Gemini API.",
+            "status": "pending",
+            "testStrategy": "Verificar no console GCP se o projeto foi criado com sucesso e se todas as APIs listadas estão habilitadas e acessíveis.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Definir Esquemas Iniciais do Firestore e Regras de Segurança",
+            "description": "Criar as coleções iniciais no Firestore conforme o modelo de dados (Manager, Establishment, Employee, Schedule, Shift, SwapRequest, WhatsAppMessage) e configurar regras de segurança básicas.",
+            "dependencies": [
+              2
+            ],
+            "details": "No console do Firestore, criar as coleções 'Manager', 'Establishment', 'Employee', 'Schedule', 'Shift', 'SwapRequest' e 'WhatsAppMessage'. Definir regras de segurança iniciais que permitam acesso de leitura/escrita apenas para usuários autenticados, ou regras mais restritivas conforme o modelo de dados da Seção 3.1.",
+            "status": "pending",
+            "testStrategy": "Acessar o Firestore via console e verificar a existência de todas as coleções. Tentar realizar operações de leitura/escrita com e sem autenticação para validar as regras de segurança básicas.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Configurar Firebase Authentication e Cloud Messaging",
+            "description": "Configurar o Firebase Authentication para autenticação por telefone e o Firebase Cloud Messaging para o envio de notificações push no projeto.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "No console do Firebase, habilitar o método de login por telefone no Firebase Auth. Configurar o Firebase Cloud Messaging para permitir o envio de notificações push. Integrar os SDKs do Firebase Authentication e Cloud Messaging no projeto React Native, garantindo que o aplicativo possa interagir com esses serviços.",
+            "status": "pending",
+            "testStrategy": "Testar o fluxo de autenticação por telefone (envio e verificação de código). Enviar uma notificação de teste via console do Firebase para um dispositivo registrado e verificar o recebimento da not notificação.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Integrar Twilio para Fallback de SMS",
+            "description": "Configurar a integração com o Twilio para ser utilizado como um mecanismo de fallback para o envio de códigos de verificação via SMS, se necessário.",
+            "dependencies": [
+              2,
+              4
+            ],
+            "details": "Criar uma conta Twilio (se ainda não tiver) e obter as credenciais necessárias (Account SID, Auth Token). Configurar um número de telefone Twilio. Desenvolver uma Cloud Function ou um serviço backend simples que utilize a API do Twilio para enviar mensagens SMS, a ser acionado em caso de falha ou como alternativa ao Firebase Auth SMS.",
+            "status": "pending",
+            "testStrategy": "Simular o envio de um código de verificação via Twilio e verificar se o SMS é recebido com sucesso no número de teste configurado.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2025-12-28T16:32:48.701Z"
+      },
+      {
+        "id": "2",
+        "title": "Implementação da Autenticação de Gerente (SMS/JWT)",
+        "description": "Desenvolver os endpoints de API para solicitação e verificação de código SMS, e implementar as telas de login e verificação de código no aplicativo do gerente, conforme US-001.",
+        "details": "1. Backend: Criar endpoints `POST /auth/request-code` e `POST /auth/verify-code` no Cloud Run. O `request-code` deve usar Firebase Auth para enviar SMS e Twilio como fallback. O `verify-code` deve verificar o código, criar ou autenticar o `Manager` no Firestore e gerar um JWT. 2. Frontend (React Native): Desenvolver as telas de `Login` e `VerifyCode` com `PhoneInput` (máscara brasileira) e `CodeInput` (6 dígitos). Implementar lógica de validação de número, timer de expiração de código (5 min) e tratamento de rate limit (3 SMS/hora/número). Criar `Manager` se não existir. 3. Persistir o JWT e dados do gerente no armazenamento local do app.",
+        "testStrategy": "Testar o fluxo completo de login: solicitar código com número novo e existente, verificar código correto/incorreto/expirado. Validar rate limiting e expiração do código. Confirmar que o token JWT é retornado e que o gerente é criado/autenticado corretamente no Firestore. Verificar a UI para máscaras e validações.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Configurar Firebase Auth e Twilio, e implementar POST /auth/request-code",
+            "description": "Configurar o Firebase Authentication para envio de SMS e Twilio como fallback. Desenvolver o endpoint POST /auth/request-code no Cloud Run para solicitar o código de verificação via SMS.",
+            "dependencies": [],
+            "details": "Configurar as credenciais do Firebase Auth e Twilio. Implementar a lógica no endpoint para primeiro tentar enviar SMS via Firebase Auth, e em caso de falha, usar Twilio. Incluir tratamento de erros e validação básica do número de telefone. Este endpoint deve ser hospedado no Cloud Run.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com números de telefone válidos e inválidos. Verificar o envio do SMS via Firebase Auth e Twilio (simulando falha do Firebase). Validar o tratamento de rate limit (3 SMS/hora/número).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Desenvolver POST /auth/verify-code para verificação e geração de JWT",
+            "description": "Implementar o endpoint POST /auth/verify-code no Cloud Run. Este endpoint será responsável por verificar o código SMS, criar ou autenticar o Manager no Firestore e gerar um JSON Web Token (JWT).",
+            "dependencies": [
+              1
+            ],
+            "details": "A lógica deve verificar o código recebido, autenticar o usuário com Firebase Auth, consultar o Firestore para verificar a existência do Manager. Se não existir, criar um novo registro de Manager. Gerar um JWT contendo informações essenciais do gerente e retorná-lo na resposta. Este endpoint deve ser hospedado no Cloud Run.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com códigos corretos, incorretos e expirados. Validar a criação de um novo Manager no Firestore para um número não registrado e a autenticação para um número existente. Verificar a estrutura e validade do JWT retornado.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Criar tela de Login com PhoneInput e máscara brasileira",
+            "description": "Desenvolver a tela de Login no aplicativo React Native do gerente. Incluir um componente PhoneInput com máscara para números de telefone brasileiros e validação inicial.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implementar a interface da tela de Login. O PhoneInput deve aceitar apenas números no formato brasileiro (ex: (XX) XXXXX-XXXX). Adicionar validação para garantir que o número inserido é válido antes de permitir a solicitação do código. Integrar com o endpoint POST /auth/request-code.",
+            "status": "pending",
+            "testStrategy": "Testar a entrada de números de telefone com a máscara. Validar a submissão do número e a chamada ao endpoint de solicitação de código. Verificar mensagens de erro para números inválidos.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar tela VerifyCode, CodeInput e lógica de validação",
+            "description": "Desenvolver a tela de VerifyCode no aplicativo React Native, incluindo um CodeInput para 6 dígitos. Implementar a lógica de validação do código, timer de expiração (5 minutos) e tratamento de rate limit (3 SMS/hora/número).",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Criar a interface da tela VerifyCode com um CodeInput de 6 dígitos. Implementar um timer regressivo de 5 minutos para a expiração do código. Adicionar lógica para reenvio de código e tratamento de rate limit (desabilitar reenvio após 3 tentativas em 1 hora). Integrar com o endpoint POST /auth/verify-code.",
+            "status": "pending",
+            "testStrategy": "Testar a entrada de códigos no CodeInput. Verificar o funcionamento do timer de expiração. Simular reenvio de código e testar o tratamento de rate limit. Validar a chamada ao endpoint de verificação de código.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Persistir JWT e dados do gerente no armazenamento local",
+            "description": "Implementar a lógica para armazenar o JWT e os dados do gerente (recebidos após a verificação bem-sucedida) no armazenamento local do aplicativo React Native.",
+            "dependencies": [
+              4
+            ],
+            "details": "Utilizar AsyncStorage ou uma solução similar para armazenar de forma segura o JWT e as informações do gerente (ex: ID, nome, telefone) após a autenticação. Implementar a recuperação desses dados na inicialização do aplicativo para manter o usuário logado.",
+            "status": "pending",
+            "testStrategy": "Após um login bem-sucedido, verificar se o JWT e os dados do gerente estão armazenados corretamente. Fechar e reabrir o aplicativo para confirmar que o usuário permanece logado e os dados são recuperados.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2025-12-28T16:38:04.605Z"
+      },
+      {
+        "id": "3",
+        "title": "Desenvolvimento do Fluxo de Onboarding do Estabelecimento (Parte 1)",
+        "description": "Implementar as telas e APIs para configurar o nome, tipo, horários de funcionamento, equipe mínima e regras de troca do estabelecimento, conforme US-002, US-003, US-004 e US-005.",
+        "details": "1. Frontend (React Native): Desenvolver as telas de onboarding: `Onboarding/Name` (TextInput, SegmentedControl), `Onboarding/Hours` (DayToggle[], TimePicker), `Onboarding/MinEmployees` (Stepper), `Onboarding/Swaps` (RadioGroup, Stepper). 2. Backend: Criar endpoints `POST /establishments` para criar o estabelecimento e `PATCH /establishments/:id/operating-hours`, `PATCH /establishments/:id/settings` para atualizar as configurações. 3. Lógica de validação: fechamento > abertura, suporte a horários após meia-noite. 4. Persistir o estado do onboarding (`onboardingStep`) no `Establishment` no Firestore.",
+        "testStrategy": "Testar cada tela de onboarding, garantindo que os dados são inseridos e validados corretamente. Verificar se as chamadas de API persistem as informações no Firestore e atualizam o `onboardingStep`. Testar casos de borda para horários (ex: 18h-02h) e validações de campos.",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implementar APIs de Criação e Configuração Inicial do Estabelecimento",
+            "description": "Desenvolver os endpoints de backend para criar um novo estabelecimento e permitir a atualização de suas configurações iniciais, como nome, tipo, horários de funcionamento, equipe mínima e regras de troca.",
+            "dependencies": [],
+            "details": "Criar o endpoint POST /establishments para a criação inicial do estabelecimento. Implementar endpoints PATCH /establishments/:id/operating-hours para horários e PATCH /establishments/:id/settings para outras configurações (equipe mínima, regras de troca). Garantir a persistência no Firestore.",
+            "status": "pending",
+            "testStrategy": "Testar cada endpoint individualmente usando ferramentas como Postman ou testes unitários/de integração. Validar a criação e atualização dos dados no Firestore.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Desenvolver Tela de Nome e Tipo do Estabelecimento (Frontend)",
+            "description": "Criar a interface de usuário para a primeira etapa do onboarding, permitindo que o usuário insira o nome do estabelecimento e selecione seu tipo.",
+            "dependencies": [],
+            "details": "Desenvolver a tela Onboarding/Name no React Native. Incluir um TextInput para o nome e um SegmentedControl para o tipo de estabelecimento. Implementar a lógica de navegação para a próxima etapa.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização da tela, a entrada de texto e a seleção do tipo. Verificar a navegação para a próxima tela.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Tela de Horários de Funcionamento (Frontend com Validação)",
+            "description": "Implementar a tela de onboarding para configurar os horários de funcionamento do estabelecimento, incluindo a lógica de validação para garantir a consistência dos horários.",
+            "dependencies": [],
+            "details": "Desenvolver a tela Onboarding/Hours no React Native. Utilizar componentes DayToggle[] para seleção dos dias e TimePicker para definir os horários de abertura e fechamento. Implementar a lógica de validação no frontend: fechamento > abertura e suporte a horários que ultrapassam a meia-noite (ex: 18h-02h).",
+            "status": "pending",
+            "testStrategy": "Testar a seleção de dias e horários. Validar a lógica de fechamento > abertura e casos de horários após meia-noite.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Desenvolver Telas de Equipe Mínima e Regras de Troca (Frontend)",
+            "description": "Criar as interfaces de usuário para as etapas de onboarding que permitem configurar o número mínimo de funcionários e as regras de troca de turno.",
+            "dependencies": [],
+            "details": "Desenvolver as telas Onboarding/MinEmployees (com um Stepper para o número de funcionários) e Onboarding/Swaps (com RadioGroup e Stepper para as regras de troca) no React Native.",
+            "status": "pending",
+            "testStrategy": "Testar a interação com os componentes Stepper e RadioGroup. Verificar a persistência dos valores selecionados no estado local da aplicação antes da integração.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Integrar Frontend-Backend e Gerenciar Estado do Onboarding",
+            "description": "Conectar as telas de onboarding do frontend com as APIs de backend e implementar a lógica para persistir o onboardingStep no Firestore, garantindo a progressão correta do fluxo.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Integrar as chamadas de API (POST para criação, PATCH para atualizações) nas respectivas telas de onboarding. Após cada etapa bem-sucedida, atualizar o campo onboardingStep no documento do Establishment no Firestore. Implementar a lógica para carregar o onboardingStep ao iniciar o aplicativo e direcionar o usuário para a etapa correta.",
+            "status": "pending",
+            "testStrategy": "Realizar um teste de fluxo completo do onboarding, desde a criação do estabelecimento até a configuração final. Verificar se os dados são corretamente enviados para o backend e persistidos no Firestore. Confirmar que o onboardingStep é atualizado e que o usuário é redirecionado corretamente ao reabrir o aplicativo.",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2025-12-28T16:38:29.724Z"
+      },
+      {
+        "id": "4",
+        "title": "Desenvolvimento do Fluxo de Onboarding do Estabelecimento (Parte 2: Funcionários)",
+        "description": "Implementar a tela para adicionar funcionários manualmente e a API correspondente, conforme US-006.",
+        "details": "1. Frontend (React Native): Desenvolver a tela `Onboarding/Team` com campos para Nome e WhatsApp do funcionário, máscara de telefone, botão '+ Adicionar mais' e lista de funcionários adicionados. Implementar opção de remover antes de confirmar. 2. Backend: Criar endpoint `POST /establishments/:id/employees` para adicionar um ou mais funcionários. Validar números de telefone duplicados e dados inválidos. O status inicial do funcionário deve ser 'pending_invite'. 3. Garantir que o onboarding só avança com no mínimo 2 funcionários.",
+        "testStrategy": "Testar a adição de múltiplos funcionários, validação de números duplicados e formato. Verificar se os funcionários são criados no Firestore com o `establishmentId` correto e `status: 'pending_invite'`. Testar a remoção de funcionários da lista antes de salvar.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implementar Endpoint Backend para Adicionar Funcionários",
+            "description": "Criar o endpoint `POST /establishments/:id/employees` no backend para receber e persistir dados de funcionários, incluindo validação de dados e definição do status inicial.",
+            "dependencies": [],
+            "details": "Desenvolver a lógica para o endpoint `POST /establishments/:id/employees` que aceita um array de objetos de funcionário (nome, whatsapp). Implementar validação para números de telefone duplicados e formato inválido. O status inicial do funcionário deve ser 'pending_invite'.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com requisições válidas e inválidas (dados ausentes, formato incorreto). Verificar a persistência correta no Firestore com `establishmentId` e `status: 'pending_invite'`. Testar a validação de números duplicados.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Desenvolver UI de Entrada de Dados do Funcionário (Frontend)",
+            "description": "Criar os componentes de interface do usuário para a entrada de nome e número de WhatsApp do funcionário na tela `Onboarding/Team`.",
+            "dependencies": [],
+            "details": "Implementar os campos `TextInput` para o nome do funcionário e `TextInput` com máscara para o número de WhatsApp. Adicionar um botão '+ Adicionar mais' que permita ao usuário adicionar múltiplos conjuntos de campos para novos funcionários.",
+            "status": "pending",
+            "testStrategy": "Verificar se os campos de entrada funcionam corretamente, a máscara de telefone é aplicada e o botão '+ Adicionar mais' adiciona novos campos de entrada.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implementar Lista de Funcionários e Funcionalidade de Remoção (Frontend)",
+            "description": "Desenvolver a exibição da lista de funcionários adicionados e a funcionalidade para remover um funcionário da lista antes da submissão final.",
+            "dependencies": [
+              2
+            ],
+            "details": "Criar um componente de lista que exiba dinamicamente os funcionários que foram adicionados através dos campos de entrada. Adicionar um ícone ou botão de 'Remover' ao lado de cada funcionário na lista, permitindo que o usuário os exclua antes de confirmar.",
+            "status": "pending",
+            "testStrategy": "Testar a adição de múltiplos funcionários à lista e a remoção de itens específicos da lista. Garantir que a lista se atualiza corretamente após adições e remoções.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Integrar API e Lógica de Validação de Mínimo de Funcionários (Frontend)",
+            "description": "Conectar a interface do usuário com o endpoint backend para submeter os funcionários e implementar a validação para garantir um número mínimo de funcionários.",
+            "dependencies": [
+              1,
+              3
+            ],
+            "details": "Implementar a lógica para coletar os dados dos funcionários da lista e fazer a chamada à API `POST /establishments/:id/employees`. Adicionar a validação no frontend para garantir que o onboarding só avance se houver no mínimo 2 funcionários na lista antes da submissão.",
+            "status": "pending",
+            "testStrategy": "Testar a submissão de funcionários com 0, 1 e 2+ funcionários. Verificar se a validação de mínimo de 2 funcionários impede o avanço. Confirmar que a chamada à API é feita com sucesso e os dados são enviados corretamente.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Refinamentos e Testes Finais do Fluxo de Onboarding de Funcionários",
+            "description": "Realizar testes abrangentes de ponta a ponta para garantir que todo o fluxo de onboarding de funcionários funcione conforme o esperado, incluindo validações e persistência de dados.",
+            "dependencies": [
+              4
+            ],
+            "details": "Executar testes de integração entre frontend e backend. Verificar se os funcionários são criados no Firestore com o `establishmentId` correto e `status: 'pending_invite'`. Testar cenários de erro na API e como o frontend os trata. Garantir que o fluxo de onboarding avança corretamente após a adição bem-sucedida dos funcionários.",
+            "status": "pending",
+            "testStrategy": "Realizar testes de ponta a ponta: adicionar funcionários, remover, tentar avançar com menos de 2, avançar com 2 ou mais. Verificar logs do backend e dados no Firestore. Testar a resiliência a falhas de rede ou erros da API.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "5",
+        "title": "Configuração e Integração da WhatsApp Business API",
+        "description": "Configurar a WhatsApp Business Cloud API, implementar o webhook para recebimento de mensagens e o serviço de envio de mensagens, utilizando Cloud Tasks para filas.",
+        "details": "1. Configurar a WhatsApp Business Cloud API no Meta Developer. 2. Desenvolver uma Cloud Function (`POST /webhooks/whatsapp`) para receber mensagens do WhatsApp. Esta função deve parsear o payload, extrair informações relevantes (remetente, conteúdo, tipo) e armazenar na coleção `WhatsAppMessage`. 3. Criar um serviço de envio de mensagens que interage com a API do WhatsApp. Este serviço deve ser capaz de enviar mensagens de texto e templates. 4. Utilizar Cloud Tasks para enfileirar mensagens outbound, garantindo resiliência e escalabilidade. 5. Definir e obter aprovação dos templates de mensagem necessários (convite, escala publicada, etc.) no Meta.",
+        "testStrategy": "Enviar mensagens de teste para o número do WhatsApp Business e verificar se o webhook as recebe e as armazena corretamente no Firestore. Testar o envio de mensagens de texto e templates via o serviço de envio, verificando o status da mensagem (`sent`, `delivered`, `read`) e o `whatsappMessageId`.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Configurar WhatsApp Business Cloud API no Meta Developer",
+            "description": "Realizar a configuração inicial da WhatsApp Business Cloud API na plataforma Meta Developer, incluindo a criação da conta, número de telefone e obtenção do token de acesso.",
+            "dependencies": [],
+            "details": "Acessar o Meta Developer, criar um aplicativo, configurar o produto WhatsApp Business, registrar um número de telefone (temporário ou real), gerar o token de acesso permanente e configurar as permissões necessárias para o aplicativo.",
+            "status": "pending",
+            "testStrategy": "Verificar a criação bem-sucedida da conta Business no Meta Developer e a obtenção de um token de acesso válido. Testar o envio de uma mensagem de teste manual via API Explorer do Meta.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Definir e obter aprovação de templates de mensagem",
+            "description": "Criar e submeter os templates de mensagem necessários (ex: convite, escala publicada) para aprovação no Meta Business Manager, garantindo que estejam prontos para uso pela API.",
+            "dependencies": [
+              1
+            ],
+            "details": "Identificar os templates essenciais para os fluxos do aplicativo (ex: convite para funcionário, notificação de escala publicada, lembrete de turno). Redigir os templates seguindo as diretrizes do WhatsApp e submetê-los para aprovação no Meta Business Manager.",
+            "status": "pending",
+            "testStrategy": "Confirmar que os templates foram aprovados e estão disponíveis para uso na API do WhatsApp, verificando o status no Meta Business Manager.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Cloud Function para Webhook de Recebimento de Mensagens",
+            "description": "Implementar uma Cloud Function (`POST /webhooks/whatsapp`) para receber e processar mensagens de entrada do WhatsApp, armazenando-as na coleção `WhatsAppMessage` no Firestore.",
+            "dependencies": [
+              1
+            ],
+            "details": "Criar uma Cloud Function HTTP que escuta em `/webhooks/whatsapp`. Esta função deve validar a assinatura do webhook do WhatsApp, parsear o payload JSON, extrair informações relevantes como `remetente`, `conteúdo`, `tipo` e `timestamp`. Armazenar essas informações na coleção `WhatsAppMessage` no Firestore.",
+            "status": "pending",
+            "testStrategy": "Configurar o webhook no Meta Developer para apontar para a URL da Cloud Function. Enviar mensagens de teste de um número de WhatsApp para o número Business e verificar se as mensagens são recebidas e armazenadas corretamente no Firestore.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Criar serviço de envio de mensagens WhatsApp",
+            "description": "Desenvolver um serviço backend capaz de interagir com a WhatsApp Business Cloud API para enviar mensagens de texto e templates.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Criar um módulo ou serviço que encapsule a lógica de interação com a API do WhatsApp. Este serviço deve ter funções para enviar mensagens de texto simples e para enviar mensagens baseadas em templates aprovados, utilizando o token de acesso obtido na configuração.",
+            "status": "pending",
+            "testStrategy": "Desenvolver testes unitários para o serviço de envio. Testar o envio de mensagens de texto e templates para um número de teste, verificando o retorno da API e o status da mensagem (`sent`, `delivered`, `read`).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Integrar Cloud Tasks para enfileiramento de mensagens outbound",
+            "description": "Configurar e utilizar o Google Cloud Tasks para enfileirar as requisições de envio de mensagens outbound, garantindo resiliência, escalabilidade e retentativas automáticas.",
+            "dependencies": [
+              4
+            ],
+            "details": "Modificar o serviço de envio de mensagens (Subtarefa 4) para que, em vez de chamar diretamente a API do WhatsApp, ele enfileire as requisições de envio no Cloud Tasks. Criar uma Cloud Function separada que será acionada pelo Cloud Tasks para realmente enviar a mensagem via API do WhatsApp.",
+            "status": "pending",
+            "testStrategy": "Enviar mensagens através do serviço modificado e verificar se as tarefas são criadas no Cloud Tasks e processadas corretamente pela Cloud Function de envio, resultando na entrega da mensagem no WhatsApp. Monitorar logs do Cloud Tasks e da Cloud Function para erros e retentativas.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "6",
+        "title": "Implementação do Fluxo de Convite e Coleta de Restrições (Funcionário)",
+        "description": "Desenvolver a funcionalidade de envio de convites para funcionários via WhatsApp e o fluxo de conversa para coletar suas restrições de disponibilidade, integrando com a Gemini API para processamento de linguagem natural, conforme US-007, US-008 e US-009.",
+        "details": "1. Frontend (React Native): Implementar a tela `Onboarding/Invite` com botão 'Enviar Convites'. 2. Backend: Criar endpoint `POST /establishments/:id/employees/send-invites`. Este endpoint deve enviar o template de convite via WhatsApp para os funcionários selecionados, atualizando o `status` do `Employee` para 'invite_sent' e `inviteSentAt`. 3. Desenvolver a lógica de processamento de mensagens inbound (Cloud Function) para o `STATE: awaiting_restrictions`. 4. Integrar com a Gemini API para processar texto livre e extrair restrições (`Restriction` interface). 5. Implementar o fluxo de confirmação de restrições com botões [Sim] [Corrigir] e a lógica para reformular a pergunta se Gemini não entender. 6. Atualizar `Employee.status` para 'active' e registrar as restrições no Firestore após confirmação.",
+        "testStrategy": "Testar o envio de convites para múltiplos funcionários. Simular respostas de funcionários com diferentes formatos de restrições (texto livre, 'não posso', 'qualquer horário'). Validar a interpretação da Gemini API e a persistência das restrições no Firestore. Testar o fluxo de confirmação e correção. Verificar se o `Employee.status` é atualizado corretamente.",
+        "priority": "high",
+        "dependencies": [
+          "4",
+          "5"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Desenvolver Tela de Envio de Convites (Frontend)",
+            "description": "Implementar a interface de usuário no aplicativo React Native para permitir que o gerente selecione funcionários e envie convites via WhatsApp, conforme US-007.",
+            "dependencies": [],
+            "details": "Criar a tela `Onboarding/Invite` no React Native. Incluir uma lista de funcionários com checkboxes para seleção e um botão 'Enviar Convites'. Adicionar lógica para chamar o endpoint de backend correspondente.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização da tela, a seleção de funcionários e a funcionalidade do botão 'Enviar Convites'. Verificar se a chamada à API de backend é feita corretamente.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Criar Endpoint de Backend para Envio de Convites WhatsApp",
+            "description": "Desenvolver o endpoint de API que recebe a lista de funcionários selecionados e envia o template de convite via WhatsApp, atualizando o status do funcionário, conforme US-007.",
+            "dependencies": [
+              1
+            ],
+            "details": "Criar o endpoint `POST /establishments/:id/employees/send-invites` no backend. Este endpoint deve receber os IDs dos funcionários, usar a API do WhatsApp Business para enviar o template de convite e atualizar o `status` do `Employee` para 'invite_sent' e `inviteSentAt` no Firestore.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com diferentes cenários (funcionários válidos/inválidos, estabelecimento existente/inexistente). Verificar se o WhatsApp envia a mensagem e se o status do funcionário é atualizado corretamente no Firestore.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implementar Lógica Inbound e Integração Gemini para Restrições",
+            "description": "Desenvolver a Cloud Function para processar mensagens de WhatsApp recebidas dos funcionários no estado `awaiting_restrictions` e integrar com a Gemini API para extrair restrições de texto livre, conforme US-008.",
+            "dependencies": [
+              2
+            ],
+            "details": "Criar uma Cloud Function que atua como webhook para mensagens inbound do WhatsApp. Quando o `STATE` do funcionário for `awaiting_restrictions`, a função deve extrair o texto da mensagem e enviá-lo para a Gemini API para processamento de linguagem natural, buscando extrair a interface `Restriction`.",
+            "status": "pending",
+            "testStrategy": "Simular o recebimento de mensagens de WhatsApp com diferentes formatos de restrições. Validar se a Cloud Function é acionada e se a Gemini API retorna a estrutura `Restriction` esperada. Testar casos de texto ambíguo ou irrelevante.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Desenvolver Fluxo de Confirmação de Restrições",
+            "description": "Implementar a lógica de conversação para confirmar as restrições extraídas pela Gemini API com o funcionário, oferecendo opções de [Sim] ou [Corrigir], conforme US-009.",
+            "dependencies": [
+              3
+            ],
+            "details": "Após a Gemini API retornar as restrições, o sistema deve enviar uma mensagem de volta ao funcionário com as restrições interpretadas e botões de ação [Sim] (para confirmar) e [Corrigir] (para solicitar nova entrada). Se a Gemini não entender, o sistema deve reformular a pergunta.",
+            "status": "pending",
+            "testStrategy": "Testar o fluxo de confirmação: funcionário responde 'Sim', funcionário responde 'Corrigir' (com nova entrada), Gemini não entende e o sistema reformula a pergunta. Verificar a persistência temporária das restrições durante o fluxo.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Persistir Restrições e Atualizar Status do Funcionário",
+            "description": "Finalizar o fluxo de coleta de restrições, salvando as restrições confirmadas no Firestore e atualizando o status do funcionário para 'active', conforme US-009.",
+            "dependencies": [
+              4
+            ],
+            "details": "Quando o funcionário confirmar as restrições através do botão [Sim], o sistema deve persistir essas restrições no Firestore (associadas ao `Employee`) e atualizar o `Employee.status` para 'active'.",
+            "status": "pending",
+            "testStrategy": "Testar o cenário completo onde o funcionário confirma as restrições. Verificar se as restrições são salvas corretamente no Firestore e se o `Employee.status` é alterado para 'active'.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "7",
+        "title": "Desenvolvimento da Gestão de Restrições pelo Gerente e Lembretes",
+        "description": "Implementar a funcionalidade de lembretes automáticos para funcionários que não responderam às restrições e a tela para o gerente aprovar ou rejeitar as restrições coletadas, conforme US-010 e US-011.",
+        "details": "1. Cloud Functions agendadas: Criar jobs para enviar lembretes 24h antes do prazo (`reminderBeforeDeadlineHours`) e no prazo final (`restrictionDeadlineHours`) para funcionários com `Employee.status: 'invite_sent'`. 2. Após o prazo, se não houver resposta, o sistema deve marcar o funcionário como 'active' e 'disponível' (sem restrições) e notificar o gerente. 3. Frontend (React Native): Desenvolver a tela `Restrictions` para o gerente, listando funcionários e suas restrições pendentes. Mostrar status (Disponível, Aguardando, Pendente) e detalhes da restrição. 4. Backend: Criar endpoint `PATCH /employees/:id/restrictions/:restrictionId` para o gerente aprovar ou rejeitar restrições. Se rejeitada, notificar o funcionário via WhatsApp. 5. Habilitar o botão 'Gerar Escala' quando todas as restrições forem processadas ou o prazo expirou.",
+        "testStrategy": "Testar o agendamento e envio dos lembretes via Cloud Functions. Validar o comportamento do sistema quando um funcionário não responde dentro do prazo. Testar a UI de aprovação/rejeição de restrições pelo gerente. Verificar se as notificações são enviadas corretamente para os funcionários em caso de rejeição.",
+        "priority": "high",
+        "dependencies": [
+          "6"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implementar Cloud Functions para Lembretes de Restrições",
+            "description": "Criar e agendar Cloud Functions para enviar lembretes automáticos aos funcionários sobre o prazo de envio de restrições, conforme US-010.",
+            "dependencies": [],
+            "details": "Desenvolver duas Cloud Functions agendadas: uma para enviar lembretes 24 horas antes do prazo final (`reminderBeforeDeadlineHours`) e outra no prazo final (`restrictionDeadlineHours`). As funções devem direcionar funcionários com `Employee.status: 'invite_sent'` e enviar notificações via WhatsApp.",
+            "status": "pending",
+            "testStrategy": "Testar o agendamento das Cloud Functions e verificar o envio correto dos lembretes para funcionários com status 'invite_sent' em diferentes cenários de prazo (24h antes e no prazo final).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Desenvolver Lógica de Processamento de Restrições Expiradas",
+            "description": "Implementar a lógica de backend para lidar com funcionários que não responderam às restrições após o prazo final, conforme US-010.",
+            "dependencies": [
+              1
+            ],
+            "details": "Criar uma Cloud Function ou lógica de backend que, após o prazo final, verifique funcionários com `Employee.status: 'invite_sent'` que não enviaram restrições. O sistema deve atualizar o `Employee.status` para 'active', marcá-los como 'disponível' (sem restrições) e notificar o gerente sobre a ausência de resposta.",
+            "status": "pending",
+            "testStrategy": "Simular o cenário de um funcionário não respondendo às restrições dentro do prazo. Verificar se o status do funcionário é atualizado corretamente para 'active' e 'disponível', e se o gerente recebe a notificação esperada.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Tela de Gestão de Restrições para o Gerente (Frontend)",
+            "description": "Criar a interface de usuário no aplicativo React Native para o gerente visualizar e gerenciar as restrições dos funcionários, conforme US-011.",
+            "dependencies": [],
+            "details": "Desenvolver a tela `Restrictions` no frontend (React Native). Esta tela deve listar todos os funcionários, suas restrições pendentes, e exibir o status de cada funcionário (Disponível, Aguardando Resposta, Pendente de Aprovação). Deve permitir a visualização detalhada das restrições enviadas.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização da lista de funcionários e suas restrições. Validar a exibição correta dos diferentes status (Disponível, Aguardando Resposta, Pendente de Aprovação) e a capacidade de visualizar os detalhes de cada restrição.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar API para Aprovação/Rejeição de Restrições (Backend)",
+            "description": "Desenvolver o endpoint de backend para permitir que o gerente aprove ou rejeite as restrições enviadas pelos funcionários, conforme US-011.",
+            "dependencies": [
+              3
+            ],
+            "details": "Criar o endpoint `PATCH /employees/:id/restrictions/:restrictionId` no backend. Este endpoint deve processar a aprovação ou rejeição de uma restrição específica pelo gerente. Em caso de rejeição, o sistema deve enviar uma notificação via WhatsApp ao funcionário informando sobre a decisão.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint de aprovação/rejeição com diferentes cenários (aprovar, rejeitar). Verificar se o status da restrição é atualizado corretamente no banco de dados e se a notificação via WhatsApp é enviada ao funcionário em caso de rejeição.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Integrar Lógica de Habilitação do Botão 'Gerar Escala'",
+            "description": "Implementar a lógica para habilitar o botão 'Gerar Escala' na interface do gerente quando todas as restrições forem processadas ou o prazo expirou.",
+            "dependencies": [
+              2,
+              4
+            ],
+            "details": "Modificar a lógica do frontend e/ou backend para que o botão 'Gerar Escala' seja habilitado apenas quando todas as restrições dos funcionários tiverem sido aprovadas/rejeitadas pelo gerente ou quando o prazo final para envio de restrições tiver expirado e a lógica de processamento de restrições expiradas (Subtask 2) tiver sido executada.",
+            "status": "pending",
+            "testStrategy": "Testar o comportamento do botão 'Gerar Escala' em diferentes estados: com restrições pendentes, com todas as restrições processadas (aprovadas/rejeitadas) e após o prazo final com funcionários que não responderam.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "8",
+        "title": "Implementação do Algoritmo de Geração de Escala com AI",
+        "description": "Desenvolver o algoritmo de inteligência artificial para gerar escalas otimizadas, considerando todas as regras de negócio e restrições, e a API para acionar essa geração, conforme US-012.",
+        "details": "1. Backend (Cloud Function/Cloud Run): Implementar o algoritmo de geração de escala. Este algoritmo deve:    a. Listar dias de funcionamento do estabelecimento.    b. Para cada dia, considerar funcionários disponíveis e suas restrições aprovadas.    c. Distribuir turnos de forma justa, garantindo o `minEmployeesPerShift`.    d. Respeitar regras CLT: 1 folga semanal, evitar mais de 6 dias consecutivos, mínimo 11h entre turnos.    e. Criar `Shift`s no Firestore. 2. Criar endpoint `POST /schedules/:id/generate`. 3. O algoritmo deve retornar a escala gerada e um objeto de `validation` com `isValid`, `warnings` e `errors` (MIN_EMPLOYEES, WEEKLY_REST, RESTRICTION_CONFLICT, MAX_CONSECUTIVE, INTER_SHIFT_REST).",
+        "testStrategy": "Testar o algoritmo com diferentes cenários de restrições e configurações de estabelecimento. Validar se as regras de negócio (CLT, mínimo de funcionários) são respeitadas. Verificar a justiça na distribuição de turnos. Analisar o objeto de `validation` retornado para garantir que erros e avisos são detectados corretamente. Testar a performance da geração de escala (alvo < 5s).",
+        "priority": "high",
+        "dependencies": [
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Configurar ambiente e modelar dados de entrada para o algoritmo",
+            "description": "Preparar o ambiente de execução (Cloud Function/Cloud Run) e garantir que os modelos de dados necessários (dias de funcionamento, funcionários, restrições) estejam acessíveis e estruturados para o algoritmo de geração de escala.",
+            "dependencies": [],
+            "details": "Configurar o projeto no Cloud Function/Cloud Run. Definir interfaces/modelos para Establishment, Employee, Restriction e Shift que serão utilizados pelo algoritmo. Implementar funções para listar dias de funcionamento do estabelecimento e buscar funcionários disponíveis com suas restrições aprovadas.",
+            "status": "pending",
+            "testStrategy": "Testar a recuperação de dados de exemplo para dias de funcionamento, funcionários e restrições. Validar a estrutura dos dados retornados.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implementar regras de negócio CLT e distribuição justa de turnos",
+            "description": "Desenvolver a lógica para garantir que o algoritmo respeite as regras da CLT (folga semanal, dias consecutivos, descanso entre turnos) e distribua os turnos de forma justa, considerando o mínimo de funcionários por turno.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implementar funções para verificar: 1 folga semanal, máximo de 6 dias consecutivos de trabalho, mínimo de 11h entre turnos. Desenvolver a lógica de distribuição que garanta minEmployeesPerShift e busque uma distribuição equitativa entre os funcionários disponíveis.",
+            "status": "pending",
+            "testStrategy": "Criar cenários de teste unitários para cada regra CLT (folga, consecutivos, descanso). Testar a distribuição com diferentes minEmployeesPerShift e verificar a justiça da alocação.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver o algoritmo principal de otimização da escala",
+            "description": "Integrar todas as regras e dados coletados para construir o algoritmo central de geração de escala, que otimizará a alocação de funcionários aos turnos.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Combinar a coleta de dados (Subtarefa 1) com as regras de negócio (Subtarefa 2) para criar o algoritmo iterativo ou heurístico que gera a escala. O algoritmo deve tentar encontrar a melhor combinação de turnos para os funcionários, minimizando conflitos e maximizando a conformidade.",
+            "status": "pending",
+            "testStrategy": "Testar o algoritmo com um conjunto completo de dados de entrada (funcionários, restrições, dias) e verificar a escala gerada. Validar se a escala é coerente e se as regras são aplicadas.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar persistência de Shifts e objeto de validação",
+            "description": "Adicionar a funcionalidade para o algoritmo criar os objetos Shift no Firestore e gerar um objeto de validation detalhado com isValid, warnings e errors.",
+            "dependencies": [
+              3
+            ],
+            "details": "Após a geração da escala pelo algoritmo, implementar a lógica para persistir cada Shift gerado no Firestore. Desenvolver a estrutura e a lógica para preencher o objeto validation com os tipos de erros e avisos especificados (MIN_EMPLOYEES, WEEKLY_REST, RESTRICTION_CONFLICT, MAX_CONSECUTIVE, INTER_SHIFT_REST).",
+            "status": "pending",
+            "testStrategy": "Gerar uma escala e verificar se os Shifts são criados corretamente no Firestore. Testar cenários que devem gerar warnings e errors específicos no objeto validation e verificar a precisão das mensagens.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Criar endpoint da API para acionar a geração da escala",
+            "description": "Desenvolver o endpoint POST /schedules/:id/generate que será responsável por receber as requisições para iniciar o processo de geração de escala pelo algoritmo.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implementar o endpoint POST /schedules/:id/generate no Cloud Function/Cloud Run. Este endpoint deve receber o ID da escala, acionar o algoritmo de geração (Subtarefa 3 e 4), e retornar a escala gerada junto com o objeto de validation.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint da API com requisições válidas e inválidas. Verificar se o algoritmo é acionado, se a escala é gerada e persistida, e se o objeto de validation é retornado corretamente na resposta da API.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "9",
+        "title": "Desenvolvimento da Interface de Visualização e Edição Manual da Escala",
+        "description": "Criar a interface de grid interativa para visualizar a escala gerada e permitir que o gerente faça ajustes manuais, incluindo a resolução de conflitos, conforme US-012, US-013 e US-014.",
+        "details": "1. Frontend (React Native): Desenvolver a tela `Schedule` com um `ScheduleGrid` (dias x funcionários). 2. Implementar a funcionalidade de toque em uma célula para editar um turno: opções de 'Dar folga', 'Escalar', 'Trocar'. 3. Integrar validação em tempo real na UI, destacando células ou dias com problemas. 4. Backend: Criar endpoint `PATCH /schedules/:id/shifts` para aplicar as mudanças manuais. Este endpoint deve revalidar a escala após as alterações. 5. Implementar a UI para resolução de conflitos, destacando dias com problemas e permitindo ao gerente selecionar quem trabalhará mesmo com restrição, notificando o funcionário afetado.",
+        "testStrategy": "Testar a visualização da escala gerada. Realizar edições manuais (adicionar, remover, trocar turnos) e verificar se as mudanças são persistidas e a validação em tempo real funciona. Testar a resolução de conflitos, garantindo que as notificações são enviadas aos funcionários quando uma folga é negada.",
+        "priority": "high",
+        "dependencies": [
+          "8"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Desenvolver a Tela de Visualização da Escala (ScheduleGrid)",
+            "description": "Criar a interface inicial da tela `Schedule` no React Native, exibindo a escala gerada em um formato de grid (dias x funcionários) para visualização.",
+            "dependencies": [],
+            "details": "Implementar o componente `ScheduleGrid` no React Native, responsável por renderizar a escala. A grid deve mostrar os dias da semana como colunas e os funcionários como linhas, exibindo os turnos atribuídos para cada um.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização correta da escala gerada, verificando se todos os funcionários e turnos são exibidos conforme esperado e se a estrutura do grid está funcional.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implementar Funcionalidade de Edição de Turnos por Toque",
+            "description": "Adicionar a capacidade de interagir com as células do `ScheduleGrid` para editar turnos, oferecendo opções como 'Dar folga', 'Escalar' e 'Trocar'.",
+            "dependencies": [
+              1
+            ],
+            "details": "Desenvolver a lógica de toque em uma célula do grid para abrir um modal ou menu de contexto com as opções de edição. Implementar a UI para cada opção ('Dar folga', 'Escalar', 'Trocar') e a lógica inicial para capturar as intenções do gerente.",
+            "status": "pending",
+            "testStrategy": "Testar a interação de toque nas células e a exibição correta das opções de edição. Validar que as opções são apresentadas de forma clara e funcional.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Integrar Validação em Tempo Real na UI",
+            "description": "Implementar a lógica de validação na interface do usuário para destacar visualmente células ou dias que apresentem conflitos ou problemas após edições manuais.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Desenvolver a lógica de validação no frontend que reage às edições manuais. As células ou dias com problemas devem ser destacados (ex: cor de fundo, ícone de aviso) para alertar o gerente sobre violações de regras ou restrições em tempo real.",
+            "status": "pending",
+            "testStrategy": "Realizar edições que causem conflitos (ex: escalar funcionário em dia de folga, exceder horas) e verificar se a UI destaca corretamente os problemas em tempo real, com feedback visual claro.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Criar Endpoint Backend para Edições Manuais da Escala",
+            "description": "Desenvolver o endpoint `PATCH /schedules/:id/shifts` no backend para receber e aplicar as alterações manuais feitas pelo gerente na escala, incluindo a revalidação completa da escala.",
+            "dependencies": [
+              2
+            ],
+            "details": "Implementar o endpoint `PATCH /schedules/:id/shifts` que aceitará um payload com as alterações de turno. Este endpoint deve conter a lógica para atualizar os dados da escala no banco de dados e, crucialmente, revalidar a escala inteira ou as partes afetadas para identificar novos conflitos.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com diferentes cenários de edição (adicionar, remover, trocar turnos). Verificar se as alterações são persistidas e se a revalidação da escala é acionada, retornando os status de conflito, se houver.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Desenvolver UI para Resolução de Conflitos e Notificação",
+            "description": "Criar a interface para o gerente visualizar e resolver conflitos identificados na escala, permitindo a seleção de quem trabalhará e enviando notificações aos funcionários afetados.",
+            "dependencies": [
+              3,
+              4
+            ],
+            "details": "Implementar uma seção ou modal na UI que liste os conflitos detectados. Para cada conflito, o gerente deve ter a opção de selecionar qual funcionário trabalhará (mesmo com restrição). Após a decisão, o sistema deve enviar uma notificação (ex: via WhatsApp) ao funcionário afetado sobre a alteração.",
+            "status": "pending",
+            "testStrategy": "Simular um cenário de conflito, usar a UI para resolvê-lo e verificar se a escala é atualizada corretamente e se a notificação é enviada ao funcionário impactado, conforme a decisão do gerente.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "10",
+        "title": "Implementação da Publicação da Escala e Notificações",
+        "description": "Desenvolver a funcionalidade para o gerente publicar a escala finalizada e enviar notificações individuais para cada funcionário via WhatsApp, conforme US-015.",
+        "details": "1. Frontend (React Native): Implementar o botão 'Publicar Escala' na tela `Schedule`. Incluir uma confirmação com resumo antes da publicação. 2. Backend: Criar endpoint `POST /schedules/:id/publish`. Este endpoint deve:    a. Atualizar o `Schedule.status` para 'published' e registrar `publishedAt`.    b. Para cada funcionário, gerar uma mensagem personalizada com seus turnos da semana.    c. Enviar essas mensagens via WhatsApp Business API (usando o serviço de envio de mensagens e Cloud Tasks).    d. Incluir um link para uma página web responsiva com a escala completa (a ser desenvolvida na Task 14). 3. Fornecer feedback de envio (X enviados, Y falhas) para o gerente.",
+        "testStrategy": "Testar a publicação da escala. Verificar se o `Schedule.status` é atualizado no Firestore. Confirmar que cada funcionário recebe uma mensagem WhatsApp com sua escala individual e o link para a escala completa. Validar o feedback de envio para o gerente.",
+        "priority": "high",
+        "dependencies": [
+          "9",
+          "5"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implementar UI de Publicação da Escala no Frontend",
+            "description": "Desenvolver o botão 'Publicar Escala' na tela `Schedule` do aplicativo React Native e a tela de confirmação com um resumo da escala antes da publicação final.",
+            "dependencies": [],
+            "details": "Criar o componente de botão na tela `Schedule`. Ao clicar, exibir um modal ou nova tela de confirmação que mostra um resumo da escala a ser publicada. Incluir botões para 'Confirmar Publicação' e 'Cancelar'.",
+            "status": "pending",
+            "testStrategy": "Testar a exibição do botão na tela `Schedule`. Verificar se o modal de confirmação aparece com o resumo correto da escala ao clicar no botão. Validar a funcionalidade dos botões 'Confirmar' e 'Cancelar'.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Desenvolver Endpoint de Publicação e Atualização de Status no Backend",
+            "description": "Criar o endpoint `POST /schedules/:id/publish` no backend que será responsável por receber a requisição de publicação da escala. Este endpoint deve atualizar o status da escala para 'published' e registrar a data e hora da publicação (`publishedAt`) no Firestore.",
+            "dependencies": [],
+            "details": "Implementar a rota `POST /schedules/:id/publish` no serviço de backend. A lógica deve incluir a validação do `id` da escala e a atualização do documento `Schedule` no Firestore, definindo `status: 'published'` e `publishedAt: new Date()`.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint `POST /schedules/:id/publish` com um `id` de escala válido e inválido. Verificar se o `Schedule.status` é alterado para 'published' e `publishedAt` é registrado corretamente no Firestore após uma publicação bem-sucedida.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Gerar Mensagens Personalizadas para Notificação WhatsApp",
+            "description": "Implementar a lógica no backend para, após a publicação da escala, iterar sobre cada funcionário associado à escala e gerar uma mensagem personalizada contendo seus turnos da semana.",
+            "dependencies": [
+              2
+            ],
+            "details": "Dentro do endpoint `POST /schedules/:id/publish` (ou uma função separada acionada por ele), desenvolver a lógica para buscar todos os funcionários da escala. Para cada funcionário, formatar uma mensagem clara e concisa com seus turnos atribuídos para a semana, incluindo datas e horários.",
+            "status": "pending",
+            "testStrategy": "Testar a geração de mensagens com diferentes cenários de escalas e funcionários (ex: funcionário com múltiplos turnos, funcionário com folga). Verificar o conteúdo das mensagens geradas para garantir que são precisas e personalizadas.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Integrar Envio de Notificações via WhatsApp Business API",
+            "description": "Implementar a integração com a WhatsApp Business API para enviar as mensagens personalizadas geradas para cada funcionário. Utilizar Cloud Tasks para gerenciar o envio assíncrono e garantir resiliência.",
+            "dependencies": [
+              3
+            ],
+            "details": "No backend, após a geração das mensagens, configurar o serviço de envio de mensagens para interagir com a WhatsApp Business API. Para cada mensagem, criar uma tarefa no Cloud Tasks que acionará o envio da notificação para o número de WhatsApp do funcionário. Incluir o link para a escala completa (Task 14).",
+            "status": "pending",
+            "testStrategy": "Testar o envio de mensagens para números de teste via WhatsApp Business API. Verificar se as mensagens são entregues com o conteúdo correto e o link da escala. Monitorar o Cloud Tasks para garantir que as tarefas são criadas e processadas.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Implementar Feedback de Envio no Frontend",
+            "description": "Desenvolver a funcionalidade no frontend para exibir um feedback claro ao gerente sobre o status do envio das notificações WhatsApp, indicando o número de mensagens enviadas com sucesso e o número de falhas.",
+            "dependencies": [
+              1,
+              4
+            ],
+            "details": "Após a chamada bem-sucedida ao endpoint `POST /schedules/:id/publish`, o backend deve retornar um resumo do status do envio (ex: `{ sent: 10, failed: 0 }`). O frontend deve capturar essa resposta e exibir uma mensagem informativa ao gerente na tela `Schedule` ou no modal de confirmação.",
+            "status": "pending",
+            "testStrategy": "Testar o feedback de envio no frontend. Simular cenários de sucesso total, sucesso parcial e falha total no backend para verificar se a mensagem de feedback exibida ao gerente é precisa e clara.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "11",
+        "title": "Desenvolvimento do Fluxo de Solicitação e Aceite de Trocas (Funcionário)",
+        "description": "Implementar o fluxo de conversa via WhatsApp para que os funcionários possam solicitar trocas de turno e aceitar pedidos de cobertura de colegas, conforme US-016 e US-017.",
+        "details": "1. Backend (Cloud Function para webhook): Desenvolver a lógica para interpretar mensagens de funcionários como 'não posso {dia}' (`TRIGGER: Funcionário envia algo como 'não posso {dia}'`). 2. Identificar o turno do funcionário, verificar o `maxSwapsPerMonth` e `swapsUsedThisMonth`. 3. Consultar funcionários de folga para sugerir cobertura. 4. Implementar o fluxo de conversa com botões [Pedir {nome}] [Falar com gerente] (`STATE: requesting_swap`). 5. Desenvolver a lógica para o funcionário que recebe o pedido de cobertura (`TRIGGER: Funcionário A pediu troca, funcionário B selecionado`), com botões [Sim, posso] [Não posso] (`STATE: awaiting_cover_response`). 6. Atualizar o `SwapRequest` no Firestore com o `coverId` e `status` apropriado.",
+        "testStrategy": "Simular o pedido de troca por um funcionário, testando diferentes dias e cenários (com/sem limite de trocas, com/sem colegas de folga). Simular o aceite/recusa de cobertura por outro funcionário. Verificar se o `SwapRequest` é criado e atualizado corretamente no Firestore e se as mensagens WhatsApp são enviadas conforme o fluxo.",
+        "priority": "high",
+        "dependencies": [
+          "10"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Configurar Webhook e Interpretação Inicial da Mensagem",
+            "description": "Desenvolver a Cloud Function para receber webhooks do WhatsApp e implementar a lógica inicial para interpretar mensagens de funcionários que solicitam trocas de turno, como 'não posso {dia}'.",
+            "dependencies": [],
+            "details": "Criar uma Cloud Function HTTP para atuar como webhook do WhatsApp. Implementar um parser de mensagens para identificar padrões como 'não posso segunda' ou 'trocar terça' e extrair o dia da semana ou data da solicitação. Armazenar o estado da conversa inicial.",
+            "status": "pending",
+            "testStrategy": "Simular o envio de mensagens de diferentes formatos via WhatsApp e verificar se a Cloud Function é acionada e a mensagem é interpretada corretamente, extraindo o dia desejado.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implementar Lógica de Validação e Sugestão de Cobertura",
+            "description": "Após a interpretação da mensagem, identificar o turno do funcionário solicitante, verificar os limites de troca (`maxSwapsPerMonth`, `swapsUsedThisMonth`) e consultar funcionários de folga para sugerir possíveis coberturas.",
+            "dependencies": [
+              1
+            ],
+            "details": "No backend, após identificar o funcionário e o dia da troca, consultar o turno agendado para aquele dia. Acessar as configurações do funcionário para verificar os limites de troca. Realizar uma consulta no Firestore para encontrar outros funcionários que estejam de folga no turno desejado e que possam cobrir.",
+            "status": "pending",
+            "testStrategy": "Testar cenários com e sem limites de troca excedidos. Validar a consulta de funcionários de folga, garantindo que apenas os elegíveis sejam sugeridos. Simular casos onde não há funcionários de folga disponíveis.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Fluxo de Conversa para Solicitação de Troca",
+            "description": "Implementar o fluxo de conversa via WhatsApp para o funcionário que está solicitando a troca, apresentando as opções de colegas para pedir cobertura ou a opção de falar com o gerente.",
+            "dependencies": [
+              2
+            ],
+            "details": "Com base nas sugestões de cobertura da etapa anterior, construir a mensagem interativa do WhatsApp com botões: [Pedir {nome do colega}] para cada sugestão e um botão [Falar com gerente]. Gerenciar o estado da conversa para 'requesting_swap' e processar a escolha do funcionário.",
+            "status": "pending",
+            "testStrategy": "Simular o fluxo de solicitação, verificando se os botões são exibidos corretamente. Testar a seleção de um colega e a opção de falar com o gerente. Validar a transição de estado da conversa.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar Lógica de Aceite/Recusa de Cobertura",
+            "description": "Desenvolver a lógica para o funcionário que recebe o pedido de cobertura, enviando a mensagem com botões para aceitar ou recusar e processando a resposta.",
+            "dependencies": [
+              3
+            ],
+            "details": "Quando um funcionário é selecionado para cobrir, enviar uma mensagem via WhatsApp para ele com os detalhes da troca e botões [Sim, posso] e [Não posso]. Gerenciar o estado da conversa para 'awaiting_cover_response' e processar a resposta do funcionário, registrando sua decisão.",
+            "status": "pending",
+            "testStrategy": "Simular o recebimento de um pedido de cobertura por um funcionário. Testar o clique nos botões 'Sim, posso' e 'Não posso' e verificar se a resposta é capturada corretamente pelo sistema.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Atualizar SwapRequest no Firestore e Notificações",
+            "description": "Implementar a lógica para atualizar o `SwapRequest` no Firestore com o `coverId` e o `status` apropriado, além de enviar notificações às partes interessadas (solicitante, cobridor, gerente).",
+            "dependencies": [
+              4
+            ],
+            "details": "Após a resposta do funcionário cobridor, atualizar o documento `SwapRequest` no Firestore. Se aceito, preencher `coverId` e definir o status (ex: 'pending_manager_approval'). Se recusado, definir o status como 'rejected' e notificar o solicitante. Enviar notificações via WhatsApp para o solicitante, o cobridor e o gerente sobre o status da troca.",
+            "status": "pending",
+            "testStrategy": "Verificar se o `SwapRequest` é criado e atualizado corretamente no Firestore em todos os cenários (aceite, recusa). Validar se as notificações são enviadas para os funcionários e o gerente com as informações corretas.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "12",
+        "title": "Implementação da Aprovação de Trocas pelo Gerente e Notificações",
+        "description": "Desenvolver a funcionalidade para o gerente aprovar ou rejeitar pedidos de troca de turno e o sistema notificar automaticamente os funcionários sobre as mudanças na escala, conforme US-018 e US-019.",
+        "details": "1. Frontend (React Native): Desenvolver a tela `PendingList` na home do gerente com `PendingCard`s para trocas pendentes. Mostrar detalhes da troca (quem pediu, quem cobre, quando, motivo). 2. Backend: Criar endpoint `PATCH /swap-requests/:id` para o gerente aprovar ou rejeitar a troca. 3. Se aprovada: Atualizar o `Shift` original para `status: 'covered'` e criar um novo `Shift` para o `coverId`. Notificar ambos os funcionários via WhatsApp sobre o resultado e a escala atualizada. 4. Se rejeitada: Notificar o solicitante. 5. Implementar notificações push (FCM) para o gerente quando houver uma troca pendente.",
+        "testStrategy": "Testar a aprovação e rejeição de trocas pelo gerente. Verificar se a escala é atualizada corretamente no Firestore após a aprovação. Confirmar que as notificações WhatsApp são enviadas para os funcionários envolvidos e que as notificações push chegam ao gerente.",
+        "priority": "high",
+        "dependencies": [
+          "11"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Desenvolver UI de Listagem e Ação de Trocas Pendentes (Gerente)",
+            "description": "Implementar a tela `PendingList` na home do gerente, exibindo `PendingCard`s para cada pedido de troca de turno pendente. Cada card deve mostrar detalhes como solicitante, cobridor, data/hora e motivo. Incluir botões para 'Aprovar' e 'Rejeitar' a troca.",
+            "dependencies": [
+              2
+            ],
+            "details": "No React Native, criar o componente `PendingList` e `PendingCard`. A `PendingList` deve consumir um endpoint de backend para listar as trocas pendentes. Os `PendingCard`s devem exibir os dados da troca e ter botões que chamam o endpoint `PATCH /swap-requests/:id` com a ação correspondente (aprovar/rejeitar).",
+            "status": "pending",
+            "testStrategy": "Testar a renderização da lista de trocas pendentes com diferentes estados (vazia, com itens). Verificar a exibição correta dos detalhes em cada card. Testar a funcionalidade dos botões 'Aprovar' e 'Rejeitar' para garantir que chamam a API corretamente.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implementar Endpoint Backend para Aprovação/Rejeição de Trocas",
+            "description": "Criar o endpoint `PATCH /swap-requests/:id` no backend que permite ao gerente aprovar ou rejeitar um pedido de troca de turno. Este endpoint deve validar a requisição e iniciar o processamento da troca.",
+            "dependencies": [],
+            "details": "Desenvolver um endpoint `PATCH /swap-requests/:id` no Cloud Run. Este endpoint deve receber o `id` da solicitação de troca e um payload indicando a ação (`approve` ou `reject`). Validar se o gerente tem permissão para realizar a ação e se a troca está em estado `pending`. Chamar as funções de serviço apropriadas para processar a aprovação ou rejeição.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com requisições de aprovação e rejeição válidas e inválidas (ID inexistente, status incorreto, gerente sem permissão). Verificar se o status da solicitação de troca é atualizado corretamente no Firestore.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Lógica de Aprovação de Troca e Notificação WhatsApp",
+            "description": "Implementar a lógica de backend para processar a aprovação de uma troca de turno. Isso inclui atualizar os turnos no Firestore e enviar notificações via WhatsApp para os funcionários envolvidos.",
+            "dependencies": [
+              2
+            ],
+            "details": "Após a aprovação via endpoint (subtarefa 2), a lógica deve: 1. Atualizar o `Shift` original do solicitante para `status: 'covered'`. 2. Criar um novo `Shift` para o `coverId` (funcionário que cobrirá). 3. Enviar uma notificação via WhatsApp para o solicitante e o cobridor, informando sobre a aprovação da troca e a escala atualizada. Utilizar o serviço de envio de mensagens existente.",
+            "status": "pending",
+            "testStrategy": "Simular a aprovação de uma troca e verificar se os `Shift`s são atualizados/criados corretamente no Firestore. Confirmar que as mensagens WhatsApp são geradas e enviadas para ambos os funcionários com o conteúdo esperado.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Desenvolver Lógica de Rejeição de Troca e Notificação WhatsApp",
+            "description": "Implementar a lógica de backend para processar a rejeição de uma troca de turno. Isso inclui atualizar o status da solicitação e notificar o funcionário solicitante via WhatsApp.",
+            "dependencies": [
+              2
+            ],
+            "details": "Após a rejeição via endpoint (subtarefa 2), a lógica deve: 1. Atualizar o `SwapRequest.status` para `rejected`. 2. Enviar uma notificação via WhatsApp apenas para o funcionário solicitante, informando sobre a rejeição da troca. Utilizar o serviço de envio de mensagens existente.",
+            "status": "pending",
+            "testStrategy": "Simular a rejeição de uma troca e verificar se o `SwapRequest.status` é atualizado para 'rejected' no Firestore. Confirmar que a mensagem WhatsApp é gerada e enviada apenas para o funcionário solicitante com o conteúdo esperado.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Implementar Notificações Push (FCM) para Gerente sobre Trocas Pendentes",
+            "description": "Configurar e implementar notificações push via Firebase Cloud Messaging (FCM) para alertar o gerente sempre que houver um novo pedido de troca de turno pendente que exija sua atenção.",
+            "dependencies": [
+              2
+            ],
+            "details": "No backend, integrar o FCM para enviar uma notificação push ao gerente quando um novo `SwapRequest` for criado com `status: 'pending'`. A notificação deve incluir um título e uma mensagem clara, como 'Nova troca pendente' e 'Um funcionário solicitou uma troca de turno. Verifique agora!'. No frontend (React Native), garantir que o aplicativo do gerente esteja configurado para receber e exibir essas notificações.",
+            "status": "pending",
+            "testStrategy": "Criar um novo pedido de troca de turno e verificar se o gerente recebe uma notificação push no aplicativo. Testar o comportamento da notificação com o aplicativo em primeiro plano, segundo plano e fechado.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "13",
+        "title": "Desenvolvimento do Fluxo de Emergências (Gerente e Funcionário)",
+        "description": "Implementar a funcionalidade para o gerente registrar ausências de emergência e solicitar cobertura urgente, bem como o fluxo de comunicação via WhatsApp para os funcionários responderem a esses pedidos, conforme US-020 e US-021.",
+        "details": "1. Frontend (React Native): Desenvolver a tela `Emergency` com um `EmployeeSelector` para o funcionário ausente e `CoverOptions` para sugerir quem pode cobrir (folga, hora extra). 2. Backend: Criar endpoint `POST /schedules/:id/emergency` para registrar a ausência e retornar sugestões de cobertura. 3. Frontend (React Native): Implementar a funcionalidade para o gerente selecionar quem pedir para cobrir. 4. Backend: Criar endpoint `POST /schedules/:id/emergency/request-cover`. Este endpoint deve enviar uma mensagem urgente via WhatsApp para o funcionário selecionado (`TRIGGER: Gerente solicita cobertura de emergência`). 5. Desenvolver a lógica de processamento de respostas para pedidos de emergência (`STATE: awaiting_emergency_response`), atualizando a escala imediatamente se aceito e notificando o gerente.",
+        "testStrategy": "Testar o registro de ausência de emergência pelo gerente. Validar as sugestões de cobertura. Simular o envio de pedido de cobertura urgente via WhatsApp e a resposta do funcionário. Verificar se a escala é atualizada imediatamente após a aceitação e se o gerente é notificado.",
+        "priority": "high",
+        "dependencies": [
+          "10"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Desenvolver UI de Registro de Ausência de Emergência",
+            "description": "Implementar a tela 'Emergency' no frontend (React Native) para o gerente registrar uma ausência de emergência, incluindo um seletor de funcionário ausente ('EmployeeSelector') e opções de cobertura ('CoverOptions') para sugerir quem pode cobrir (folga, hora extra).",
+            "dependencies": [],
+            "details": "Desenvolver a tela 'Emergency' no React Native. Incluir componentes 'EmployeeSelector' para escolher o funcionário ausente e 'CoverOptions' para exibir sugestões de cobertura baseadas em folgas ou horas extras disponíveis. A UI deve permitir a entrada de detalhes da ausência.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização da tela, a seleção de funcionários e a exibição das opções de cobertura. Validar a interação com os componentes da UI e a coleta de dados da ausência.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Criar API de Registro de Ausência e Sugestão de Cobertura",
+            "description": "Desenvolver o endpoint de backend 'POST /schedules/:id/emergency' para registrar a ausência de emergência de um funcionário e retornar sugestões de cobertura baseadas na disponibilidade da equipe.",
+            "dependencies": [
+              1
+            ],
+            "details": "Implementar o endpoint 'POST /schedules/:id/emergency'. A lógica deve registrar a ausência no banco de dados e calcular sugestões de funcionários disponíveis para cobertura, considerando folgas, horas extras, restrições e regras de escala.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint com diferentes cenários de ausência e disponibilidade de funcionários. Validar o registro da ausência e a precisão das sugestões de cobertura retornadas, incluindo casos de borda.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Implementar UI de Seleção e Solicitação de Cobertura",
+            "description": "No frontend (React Native), implementar a funcionalidade para o gerente selecionar um funcionário sugerido para cobrir a ausência e iniciar o processo de solicitação de cobertura.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Desenvolver a interface para o gerente visualizar as sugestões de cobertura retornadas pela API e selecionar um funcionário. Implementar a ação de 'Solicitar Cobertura' que irá disparar a chamada para o backend com o funcionário escolhido.",
+            "status": "pending",
+            "testStrategy": "Testar a seleção de um funcionário para cobertura na UI. Validar que a ação de solicitação de cobertura é disparada corretamente e que os dados do funcionário selecionado são enviados para o backend.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Criar API de Envio de Pedido de Cobertura via WhatsApp",
+            "description": "Desenvolver o endpoint de backend 'POST /schedules/:id/emergency/request-cover' que, ao ser acionado, envia uma mensagem urgente via WhatsApp para o funcionário selecionado, solicitando a cobertura de emergência.",
+            "dependencies": [
+              3
+            ],
+            "details": "Implementar o endpoint 'POST /schedules/:id/emergency/request-cover'. Este endpoint deve integrar-se com a API do WhatsApp para enviar uma mensagem urgente ao funcionário, com detalhes da solicitação de cobertura e um link para resposta rápida.",
+            "status": "pending",
+            "testStrategy": "Testar o endpoint, verificando se a mensagem de WhatsApp é enviada corretamente para o número do funcionário. Simular diferentes cenários de solicitação e verificar o conteúdo e o formato da mensagem.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Desenvolver Lógica de Processamento de Respostas e Atualização da Escala",
+            "description": "Implementar a lógica de backend para processar as respostas dos funcionários aos pedidos de emergência via WhatsApp ('STATE: awaiting_emergency_response'), atualizando a escala imediatamente se a cobertura for aceita e notificando o gerente.",
+            "dependencies": [
+              4
+            ],
+            "details": "Criar um webhook ou listener para receber as respostas do WhatsApp. Desenvolver a lógica para interpretar a resposta (aceitar/recusar), atualizar o 'Schedule' no banco de dados se aceito, e enviar uma notificação ao gerente sobre o status da cobertura e a atualização da escala.",
+            "status": "pending",
+            "testStrategy": "Simular respostas de 'aceite' e 'recusa' via WhatsApp. Verificar se a escala é atualizada corretamente no banco de dados em caso de aceite e se o gerente recebe a notificação apropriada em ambos os casos.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "14",
+        "title": "Desenvolvimento da Tela Home do Gerente e Visualização Individual do Funcionário",
+        "description": "Criar a tela Home do gerente com um dashboard consolidado e desenvolver a funcionalidade para o funcionário visualizar sua escala individual via WhatsApp e um link web responsivo, conforme US-022 e US-024.",
+        "details": "1. Frontend (React Native): Desenvolver a tela `Home` do gerente com `TodayCard` (quem trabalha hoje), `PendingList` (trocas, restrições), `WeekPreview` (calendário compacto) e `Bottom nav`. 2. Backend: Criar endpoints para alimentar a `Home` com dados resumidos. 3. Backend (Cloud Function para webhook): Desenvolver a lógica para interpretar mensagens de funcionários como 'qual minha escala' no WhatsApp. 4. O sistema deve responder com a escala da semana atual do funcionário e incluir um link para uma página web responsiva. 5. Frontend (Web responsivo): Desenvolver uma página web simples para exibir a escala individual de um funcionário, acessível via link compartilhado, sem necessidade de login.",
+        "testStrategy": "Testar a tela Home do gerente, verificando se todos os componentes exibem os dados corretos e atualizados. Simular a solicitação de escala individual por um funcionário via WhatsApp e verificar a resposta. Acessar o link da escala individual em diferentes dispositivos (mobile, desktop) para validar a responsividade.",
+        "priority": "medium",
+        "dependencies": [
+          "10"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Desenvolver a UI da Tela Home do Gerente (React Native)",
+            "description": "Implementar os componentes visuais da tela Home do gerente no React Native, incluindo o TodayCard, PendingList, WeekPreview e a navegação inferior, conforme o design da US-022.",
+            "dependencies": [],
+            "details": "Criar os componentes React Native para o TodayCard (exibindo funcionários trabalhando hoje), PendingList (listando trocas e restrições pendentes), WeekPreview (calendário compacto da semana) e integrar a Bottom Navigation. Garantir que a UI seja responsiva e intuitiva para o gerente.",
+            "status": "pending",
+            "testStrategy": "Testar a renderização correta de todos os componentes da tela Home do gerente com dados mockados. Verificar a navegação entre as abas e a interação básica dos elementos da UI.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implementar Endpoints Backend para a Tela Home do Gerente",
+            "description": "Desenvolver os endpoints de backend necessários para fornecer os dados resumidos que alimentarão os componentes da tela Home do gerente (TodayCard, PendingList, WeekPreview), conforme a US-022.",
+            "dependencies": [
+              1
+            ],
+            "details": "Criar endpoints RESTful para buscar informações como a lista de funcionários trabalhando hoje, trocas e restrições pendentes, e um resumo da escala semanal. Garantir que os dados sejam agregados e formatados de forma eficiente para consumo pelo frontend da tela Home.",
+            "status": "pending",
+            "testStrategy": "Testar os endpoints de backend usando ferramentas como Postman ou testes unitários/de integração para verificar se retornam os dados esperados, no formato correto e com bom desempenho. Validar casos de borda e ausência de dados.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Desenvolver Cloud Function para Webhook do WhatsApp",
+            "description": "Criar uma Cloud Function para atuar como webhook, recebendo e interpretando as mensagens dos funcionários via WhatsApp, especificamente a solicitação de escala individual, conforme a US-024.",
+            "dependencies": [],
+            "details": "Configurar uma Cloud Function (e.g., Firebase Functions) para receber requisições do webhook do WhatsApp. Implementar a lógica inicial para parsear o corpo da mensagem e identificar intenções como 'qual minha escala', extraindo informações relevantes do funcionário.",
+            "status": "pending",
+            "testStrategy": "Simular o envio de mensagens via webhook para a Cloud Function e verificar se a função é acionada corretamente e se a mensagem é parseada e a intenção identificada com sucesso. Testar diferentes formatos de mensagens.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar Lógica de Resposta da Escala Individual via WhatsApp e Geração de Link",
+            "description": "Desenvolver a lógica na Cloud Function para buscar a escala semanal do funcionário, formatar a resposta para o WhatsApp e gerar um link único para a visualização web responsiva da escala, conforme a US-024.",
+            "dependencies": [
+              3
+            ],
+            "details": "Dentro da Cloud Function, após identificar a intenção de 'escala', buscar a escala da semana atual do funcionário no banco de dados. Formatar a resposta textual de forma clara para o WhatsApp e gerar um link único e seguro para a página web da escala individual, incluindo um token de acesso temporário.",
+            "status": "pending",
+            "testStrategy": "Testar a integração completa: enviar mensagem via WhatsApp, verificar se a Cloud Function busca a escala correta, formata a resposta e gera um link válido. Validar a segurança e expiração do token no link gerado.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Desenvolver Página Web Responsiva para Visualização da Escala Individual",
+            "description": "Criar uma página web simples e responsiva que exiba a escala individual de um funcionário, acessível através de um link único sem a necessidade de login, conforme a US-024.",
+            "dependencies": [
+              4
+            ],
+            "details": "Desenvolver uma página web (e.g., com React, Vue, ou HTML/CSS/JS simples) que receba um token ou ID via URL para buscar e exibir a escala de um funcionário. A página deve ser responsiva para funcionar bem em dispositivos móveis e desktop, e não deve exigir autenticação para acesso à escala específica.",
+            "status": "pending",
+            "testStrategy": "Acessar a página web com links gerados pela Cloud Function em diferentes navegadores e dispositivos (mobile, tablet, desktop). Verificar a exibição correta da escala, a responsividade da interface e a validade do acesso via token.",
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": "15",
+        "title": "Implementação de Notificações Push e Refinamentos Finais",
+        "description": "Integrar notificações push para o gerente, realizar testes de ponta a ponta, corrigir bugs e aplicar otimizações de performance e segurança.",
+        "details": "1. Integrar Firebase Cloud Messaging (FCM) no aplicativo do gerente para notificações push (ex: trocas pendentes, lembretes de restrições). 2. Realizar testes E2E abrangentes para todos os fluxos de usuário (onboarding, escala, trocas, emergências). 3. Identificar e corrigir bugs. 4. Implementar otimizações de performance: paginação de listas (20 itens), cache de dados frequentes, lazy loading de telas, compressão de imagens, debounce em buscas. 5. Revisar e fortalecer as considerações de segurança: rotação de refresh token, validação de autorização em todas as operações, hashing de números de telefone em logs, regras de segurança do Firestore, HTTPS obrigatório, backup diário.",
+        "testStrategy": "Testar o recebimento de notificações push em diferentes cenários. Executar todos os cenários de teste E2E para garantir a funcionalidade completa. Monitorar a performance da API e do aplicativo para garantir que os alvos são atingidos. Realizar testes de segurança (ex: tentar acessar dados não autorizados) e verificar logs para hashing de dados sensíveis.",
+        "priority": "medium",
+        "dependencies": [
+          "12",
+          "13",
+          "14"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Integrar Notificações Push (FCM) para Gerente",
+            "description": "Implementar a integração do Firebase Cloud Messaging (FCM) no aplicativo do gerente para permitir o envio e recebimento de notificações push sobre eventos importantes.",
+            "dependencies": [],
+            "details": "Configurar o FCM no projeto React Native e no backend (Cloud Functions/Run) para enviar notificações sobre eventos críticos como trocas pendentes, aprovações de trocas e lembretes de restrições. Desenvolver a lógica no frontend para registrar o token do dispositivo e lidar com o recebimento das notificações.",
+            "status": "pending",
+            "testStrategy": "Testar o envio e recebimento de notificações push em diferentes estados do aplicativo (em primeiro plano, em segundo plano, fechado) para vários cenários (troca pendente, troca aprovada/rejeitada, lembrete de restrição).",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Realizar Testes de Ponta a Ponta (E2E) Abrangentes",
+            "description": "Executar testes de ponta a ponta para validar todos os fluxos críticos do usuário no aplicativo, garantindo a funcionalidade e a integração entre os módulos.",
+            "dependencies": [
+              1
+            ],
+            "details": "Desenvolver e executar suítes de testes E2E usando ferramentas como Detox ou Appium, cobrindo fluxos como onboarding de gerente, criação e publicação de escalas, solicitação e aprovação de trocas, e gerenciamento de emergências. Documentar os resultados dos testes.",
+            "status": "pending",
+            "testStrategy": "Definir cenários de teste detalhados para cada fluxo de usuário. Automatizar a execução dos testes E2E em ambientes de staging e produção.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Identificar e Corrigir Bugs Encontrados",
+            "description": "Analisar os relatórios de bugs provenientes dos testes E2E e de outras fontes, e implementar as correções necessárias para garantir a estabilidade e a usabilidade do aplicativo.",
+            "dependencies": [
+              2
+            ],
+            "details": "Priorizar os bugs com base na severidade e impacto. Reproduzir os bugs, identificar a causa raiz e aplicar as correções no código. Realizar testes de regressão para garantir que as correções não introduzam novos problemas.",
+            "status": "pending",
+            "testStrategy": "Após a correção de cada bug, realizar testes unitários, de integração e de regressão específicos para a funcionalidade afetada. Re-executar os testes E2E relevantes.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Implementar Otimizações de Performance",
+            "description": "Aplicar diversas técnicas de otimização para melhorar a velocidade e a responsividade do aplicativo, incluindo paginação, cache, lazy loading, compressão de imagens e debounce.",
+            "dependencies": [
+              3
+            ],
+            "details": "Implementar paginação de listas (ex: 20 itens por página) para reduzir a carga inicial de dados. Adicionar cache para dados frequentemente acessados. Configurar lazy loading para telas e componentes. Otimizar o carregamento de imagens com compressão. Aplicar debounce em campos de busca para evitar chamadas excessivas à API.",
+            "status": "pending",
+            "testStrategy": "Monitorar métricas de performance (tempo de carregamento de tela, uso de memória, tempo de resposta da API) antes e depois das otimizações. Testar a funcionalidade da paginação, cache e lazy loading.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Revisar e Fortalecer Medidas de Segurança",
+            "description": "Realizar uma revisão abrangente das práticas de segurança do aplicativo e do backend, implementando melhorias para proteger dados e acessos.",
+            "dependencies": [
+              4
+            ],
+            "details": "Implementar rotação de refresh tokens. Garantir validação de autorização em todas as operações de API. Aplicar hashing em números de telefone antes de logar. Revisar e fortalecer as regras de segurança do Firestore. Assegurar que todas as comunicações utilizem HTTPS. Configurar backups diários para os dados críticos.",
+            "status": "pending",
+            "testStrategy": "Realizar testes de penetração e auditorias de segurança. Verificar a eficácia da rotação de tokens, validação de autorização e regras do Firestore. Confirmar que dados sensíveis não são logados sem hashing. Testar a restauração de dados a partir de backups.",
+            "parentId": "undefined"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2025-12-28T16:38:29.725Z",
+      "taskCount": 15,
+      "completedCount": 2,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}

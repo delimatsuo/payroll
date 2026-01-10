@@ -1,0 +1,1828 @@
+# PRD: Escala Simples
+## Product Requirements Document
+
+**Versão:** 2.0
+**Data:** 28/12/2024
+**Status:** Ready for Development
+
+---
+
+## 1. Visão Geral
+
+### 1.1 Problema
+
+Gerentes de restaurantes e lojas gastam 3-5 horas por semana gerenciando escalas de trabalho usando Excel e WhatsApp. Quando um funcionário falta, o gerente perde 30-60 minutos ligando para encontrar cobertura.
+
+### 1.2 Solução
+
+Sistema de gestão de escala que:
+- Coleta restrições de funcionários automaticamente via WhatsApp
+- Gera escalas otimizadas com AI
+- Facilita trocas de turno entre funcionários
+- Notifica todos automaticamente sobre mudanças
+
+### 1.3 Proposta de Valor
+
+```
+GERENTE: "Configure uma vez, aprove quando precisar."
+FUNCIONÁRIO: "Diga quando não pode, troque com colegas. Tudo pelo WhatsApp."
+```
+
+### 1.4 Usuários
+
+| Tipo | Descrição | Canal |
+|------|-----------|-------|
+| Gerente | Dono ou gerente do estabelecimento | App Mobile (iOS/Android) |
+| Funcionário | Colaborador horista | WhatsApp (sem app) |
+
+---
+
+## 2. Arquitetura Técnica
+
+### 2.1 Stack
+
+```
+FRONTEND:
+├── React Native + Expo (App do Gerente)
+├── Web responsivo para links compartilhados
+└── WhatsApp Business API (interface do funcionário)
+
+BACKEND:
+├── Google Cloud Platform (GCP)
+├── Cloud Run (API REST)
+├── Firestore (banco de dados)
+├── Cloud Functions (webhooks, jobs agendados)
+├── Gemini API (processamento de linguagem natural)
+└── Cloud Tasks (filas de mensagens)
+
+INTEGRAÇÕES:
+├── WhatsApp Business Cloud API
+├── Firebase Auth (autenticação)
+├── Firebase Cloud Messaging (push notifications)
+└── Twilio (SMS fallback)
+```
+
+### 2.2 Diagrama de Arquitetura
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   App do    │────▶│   API       │────▶│  Firestore  │
+│   Gerente   │◀────│  (Cloud Run)│◀────│             │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │   Gemini    │
+                    │   (NLP)     │
+                    └─────────────┘
+                           │
+                           ▼
+┌─────────────┐     ┌─────────────┐
+│ Funcionário │◀───▶│  WhatsApp   │
+│ (WhatsApp)  │     │  Business   │
+└─────────────┘     └─────────────┘
+```
+
+---
+
+## 3. Modelo de Dados
+
+### 3.1 Entidades
+
+#### 3.1.1 Gerente (Manager)
+
+```typescript
+interface Manager {
+  id: string;                    // UUID
+  phone: string;                 // "+5511999999999" (único)
+  name: string;                  // "Carlos Silva"
+  email?: string;                // Opcional
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+
+  // Auth
+  phoneVerified: boolean;
+  lastLoginAt?: Timestamp;
+
+  // Push notifications
+  fcmTokens: string[];           // Tokens de dispositivos
+}
+```
+
+**Índices:**
+- `phone` (único)
+- `createdAt`
+
+#### 3.1.2 Estabelecimento (Establishment)
+
+```typescript
+interface Establishment {
+  id: string;                    // UUID
+  managerId: string;             // FK → Manager
+  name: string;                  // "Restaurante do Carlos"
+  type: EstablishmentType;       // 'restaurant' | 'store' | 'bar' | 'other'
+
+  // Horários de funcionamento
+  operatingHours: {
+    [day: number]: {             // 0=domingo, 1=segunda, ..., 6=sábado
+      isOpen: boolean;
+      openTime: string;          // "10:00" (HH:mm)
+      closeTime: string;         // "22:00" (HH:mm)
+    }
+  };
+
+  // Configurações
+  settings: {
+    minEmployeesPerShift: number;        // Mínimo de pessoas por turno
+    swapsAllowed: boolean;               // Trocas permitidas?
+    swapsRequireApproval: boolean;       // Trocas requerem aprovação?
+    maxSwapsPerMonth: number;            // Limite de trocas por funcionário (0 = ilimitado)
+    restrictionDeadlineHours: number;    // Prazo para informar restrições (default: 72)
+    reminderBeforeDeadlineHours: number; // Lembrete X horas antes do prazo (default: 24)
+  };
+
+  // Status
+  status: 'onboarding' | 'active' | 'inactive';
+  onboardingStep: number;        // 1-7 durante onboarding
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+type EstablishmentType = 'restaurant' | 'store' | 'bar' | 'other';
+```
+
+**Índices:**
+- `managerId`
+- `status`
+- `createdAt`
+
+#### 3.1.3 Funcionário (Employee)
+
+```typescript
+interface Employee {
+  id: string;                    // UUID
+  establishmentId: string;       // FK → Establishment
+
+  // Dados básicos
+  name: string;                  // "João Silva"
+  phone: string;                 // "+5511999991111"
+
+  // Status no sistema
+  status: EmployeeStatus;
+  inviteSentAt?: Timestamp;      // Quando o convite foi enviado
+  inviteRespondedAt?: Timestamp; // Quando respondeu
+
+  // Restrições de disponibilidade
+  restrictions: Restriction[];
+
+  // Contagem de trocas
+  swapsUsedThisMonth: number;
+  swapsResetAt: Timestamp;       // Primeiro dia do mês
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+type EmployeeStatus =
+  | 'pending_invite'             // Convite não enviado ainda
+  | 'invite_sent'                // Convite enviado, aguardando resposta
+  | 'active'                     // Respondeu ou prazo expirou (disponível)
+  | 'inactive';                  // Desativado
+
+interface Restriction {
+  id: string;                    // UUID
+  type: 'full_day' | 'time_range';
+  dayOfWeek: number;             // 0-6 (domingo-sábado)
+  startTime?: string;            // "18:00" - só para time_range
+  endTime?: string;              // "23:59" - só para time_range
+  reason?: string;               // "Faculdade"
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: Timestamp;
+  reviewedAt?: Timestamp;
+  reviewedBy?: string;           // managerId
+}
+```
+
+**Índices:**
+- `establishmentId`
+- `phone`
+- `status`
+- `establishmentId, status` (composto)
+
+#### 3.1.4 Escala (Schedule)
+
+```typescript
+interface Schedule {
+  id: string;                    // UUID
+  establishmentId: string;       // FK → Establishment
+
+  // Período
+  weekStartDate: string;         // "2025-01-06" (sempre segunda-feira)
+  weekEndDate: string;           // "2025-01-12" (sempre domingo)
+
+  // Status
+  status: ScheduleStatus;
+
+  // Histórico
+  createdAt: Timestamp;
+  publishedAt?: Timestamp;
+  updatedAt: Timestamp;
+
+  // Versão (para conflitos)
+  version: number;
+}
+
+type ScheduleStatus =
+  | 'collecting_restrictions'    // Coletando restrições dos funcionários
+  | 'draft'                      // Gerada, aguardando revisão
+  | 'published'                  // Publicada e ativa
+  | 'archived';                  // Semana passou
+```
+
+**Índices:**
+- `establishmentId`
+- `weekStartDate`
+- `status`
+- `establishmentId, weekStartDate` (composto, único)
+
+#### 3.1.5 Turno (Shift)
+
+```typescript
+interface Shift {
+  id: string;                    // UUID
+  scheduleId: string;            // FK → Schedule
+  employeeId: string;            // FK → Employee
+
+  // Quando
+  date: string;                  // "2025-01-06" (YYYY-MM-DD)
+  startTime: string;             // "10:00" (HH:mm)
+  endTime: string;               // "18:00" (HH:mm)
+
+  // Status
+  status: ShiftStatus;
+
+  // Metadados
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+type ShiftStatus =
+  | 'scheduled'                  // Normal
+  | 'swap_pending'               // Troca em andamento
+  | 'absent'                     // Funcionário faltou
+  | 'covered';                   // Foi coberto por outro
+```
+
+**Índices:**
+- `scheduleId`
+- `employeeId`
+- `date`
+- `scheduleId, date` (composto)
+- `employeeId, date` (composto)
+
+#### 3.1.6 Troca (SwapRequest)
+
+```typescript
+interface SwapRequest {
+  id: string;                    // UUID
+  scheduleId: string;            // FK → Schedule
+  shiftId: string;               // FK → Shift (turno original)
+
+  // Quem
+  requesterId: string;           // FK → Employee (quem pediu)
+  coverId?: string;              // FK → Employee (quem vai cobrir)
+
+  // Detalhes
+  date: string;                  // "2025-01-06"
+  reason?: string;               // "Consulta médica"
+
+  // Status
+  status: SwapStatus;
+
+  // Fluxo
+  requestedAt: Timestamp;
+  coverAcceptedAt?: Timestamp;
+  managerReviewedAt?: Timestamp;
+  resolvedAt?: Timestamp;
+
+  // Resultado
+  resolution?: 'approved' | 'rejected' | 'cancelled' | 'expired';
+  resolutionNote?: string;
+}
+
+type SwapStatus =
+  | 'finding_cover'              // Procurando quem cubra
+  | 'pending_cover_response'     // Aguardando resposta do colega
+  | 'pending_manager_approval'   // Aguardando aprovação do gerente
+  | 'approved'                   // Aprovada
+  | 'rejected'                   // Rejeitada
+  | 'cancelled'                  // Cancelada pelo solicitante
+  | 'expired';                   // Expirou sem resolução
+```
+
+**Índices:**
+- `scheduleId`
+- `requesterId`
+- `coverId`
+- `status`
+- `date`
+
+#### 3.1.7 Mensagem WhatsApp (WhatsAppMessage)
+
+```typescript
+interface WhatsAppMessage {
+  id: string;                    // UUID
+
+  // Participantes
+  phone: string;                 // "+5511999991111"
+  direction: 'inbound' | 'outbound';
+
+  // Conteúdo
+  type: 'text' | 'button_response' | 'template';
+  content: string;               // Texto da mensagem
+  templateName?: string;         // Nome do template usado
+  buttonPayload?: string;        // Payload do botão clicado
+
+  // Contexto
+  context: MessageContext;
+
+  // Status (para outbound)
+  status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  whatsappMessageId?: string;    // ID do WhatsApp
+
+  // Processamento
+  processedAt?: Timestamp;
+  processedResult?: any;         // Resultado do processamento
+
+  createdAt: Timestamp;
+}
+
+interface MessageContext {
+  employeeId?: string;
+  establishmentId?: string;
+  scheduleId?: string;
+  swapRequestId?: string;
+  conversationState?: string;    // Estado da conversa
+}
+```
+
+**Índices:**
+- `phone`
+- `createdAt`
+- `status`
+- `phone, createdAt` (composto)
+
+---
+
+## 4. API Endpoints
+
+### 4.1 Autenticação
+
+#### POST /auth/request-code
+Solicita código de verificação via SMS.
+
+**Request:**
+```json
+{
+  "phone": "+5511999999999"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "expiresIn": 300
+}
+```
+
+**Errors:**
+- 400: Número inválido
+- 429: Muitas tentativas (rate limit)
+
+---
+
+#### POST /auth/verify-code
+Verifica código e retorna token.
+
+**Request:**
+```json
+{
+  "phone": "+5511999999999",
+  "code": "123456"
+}
+```
+
+**Response (200):**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "manager": {
+    "id": "uuid",
+    "phone": "+5511999999999",
+    "name": "Carlos",
+    "isNew": true
+  },
+  "establishment": null
+}
+```
+
+**Errors:**
+- 400: Código inválido
+- 410: Código expirado
+
+---
+
+### 4.2 Onboarding
+
+#### POST /establishments
+Cria estabelecimento (passo 2 do onboarding).
+
+**Request:**
+```json
+{
+  "name": "Restaurante do Carlos",
+  "type": "restaurant"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "name": "Restaurante do Carlos",
+  "type": "restaurant",
+  "status": "onboarding",
+  "onboardingStep": 3
+}
+```
+
+---
+
+#### PATCH /establishments/:id/operating-hours
+Define horários de funcionamento (passo 3).
+
+**Request:**
+```json
+{
+  "operatingHours": {
+    "0": { "isOpen": false },
+    "1": { "isOpen": true, "openTime": "10:00", "closeTime": "22:00" },
+    "2": { "isOpen": true, "openTime": "10:00", "closeTime": "22:00" },
+    "3": { "isOpen": true, "openTime": "10:00", "closeTime": "22:00" },
+    "4": { "isOpen": true, "openTime": "10:00", "closeTime": "22:00" },
+    "5": { "isOpen": true, "openTime": "10:00", "closeTime": "23:00" },
+    "6": { "isOpen": true, "openTime": "10:00", "closeTime": "23:00" }
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "operatingHours": { ... },
+  "onboardingStep": 4
+}
+```
+
+---
+
+#### PATCH /establishments/:id/settings
+Define configurações (passos 4 e 5).
+
+**Request:**
+```json
+{
+  "settings": {
+    "minEmployeesPerShift": 3,
+    "swapsAllowed": true,
+    "swapsRequireApproval": true,
+    "maxSwapsPerMonth": 2
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "settings": { ... },
+  "onboardingStep": 6
+}
+```
+
+---
+
+### 4.3 Funcionários
+
+#### POST /establishments/:id/employees
+Adiciona funcionário(s).
+
+**Request:**
+```json
+{
+  "employees": [
+    { "name": "João Silva", "phone": "+5511999991111" },
+    { "name": "Maria Santos", "phone": "+5511999992222" }
+  ]
+}
+```
+
+**Response (201):**
+```json
+{
+  "employees": [
+    { "id": "uuid1", "name": "João Silva", "phone": "+5511999991111", "status": "pending_invite" },
+    { "id": "uuid2", "name": "Maria Santos", "phone": "+5511999992222", "status": "pending_invite" }
+  ]
+}
+```
+
+**Errors:**
+- 400: Telefone duplicado
+- 400: Dados inválidos
+
+---
+
+#### POST /establishments/:id/employees/send-invites
+Envia convites para funcionários.
+
+**Request:**
+```json
+{
+  "employeeIds": ["uuid1", "uuid2"]
+}
+```
+
+**Response (200):**
+```json
+{
+  "sent": 2,
+  "failed": 0,
+  "results": [
+    { "employeeId": "uuid1", "status": "sent" },
+    { "employeeId": "uuid2", "status": "sent" }
+  ]
+}
+```
+
+---
+
+#### GET /establishments/:id/employees
+Lista funcionários.
+
+**Query params:**
+- `status`: Filtrar por status
+
+**Response (200):**
+```json
+{
+  "employees": [
+    {
+      "id": "uuid1",
+      "name": "João Silva",
+      "phone": "+5511999991111",
+      "status": "active",
+      "restrictions": [
+        {
+          "id": "r1",
+          "type": "time_range",
+          "dayOfWeek": 2,
+          "startTime": "18:00",
+          "endTime": "23:59",
+          "reason": "Faculdade",
+          "status": "approved"
+        }
+      ],
+      "swapsUsedThisMonth": 1
+    }
+  ]
+}
+```
+
+---
+
+#### PATCH /employees/:id/restrictions/:restrictionId
+Aprova ou rejeita restrição.
+
+**Request:**
+```json
+{
+  "status": "approved"
+}
+```
+
+**Response (200):**
+```json
+{
+  "restriction": {
+    "id": "r1",
+    "status": "approved",
+    "reviewedAt": "2025-01-02T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 4.4 Escalas
+
+#### POST /establishments/:id/schedules
+Cria nova escala para a semana.
+
+**Request:**
+```json
+{
+  "weekStartDate": "2025-01-06"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "weekStartDate": "2025-01-06",
+  "weekEndDate": "2025-01-12",
+  "status": "collecting_restrictions"
+}
+```
+
+---
+
+#### POST /schedules/:id/generate
+Gera escala automaticamente com AI.
+
+**Request:**
+```json
+{}
+```
+
+**Response (200):**
+```json
+{
+  "schedule": {
+    "id": "uuid",
+    "status": "draft",
+    "shifts": [
+      {
+        "id": "s1",
+        "employeeId": "e1",
+        "employeeName": "João",
+        "date": "2025-01-06",
+        "startTime": "10:00",
+        "endTime": "18:00"
+      }
+    ],
+    "validation": {
+      "isValid": true,
+      "warnings": [],
+      "errors": []
+    }
+  }
+}
+```
+
+**Validation Errors Examples:**
+```json
+{
+  "isValid": false,
+  "errors": [
+    {
+      "type": "understaffed",
+      "date": "2025-01-08",
+      "message": "Quarta precisa de 3 pessoas, só tem 2 disponíveis",
+      "severity": "error"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "consecutive_days",
+      "employeeId": "e1",
+      "message": "João vai trabalhar 6 dias seguidos",
+      "severity": "warning"
+    }
+  ]
+}
+```
+
+---
+
+#### PATCH /schedules/:id/shifts
+Atualiza turnos manualmente.
+
+**Request:**
+```json
+{
+  "changes": [
+    {
+      "action": "remove",
+      "shiftId": "s1"
+    },
+    {
+      "action": "add",
+      "employeeId": "e2",
+      "date": "2025-01-06",
+      "startTime": "10:00",
+      "endTime": "18:00"
+    }
+  ]
+}
+```
+
+**Response (200):**
+```json
+{
+  "shifts": [ ... ],
+  "validation": { ... }
+}
+```
+
+---
+
+#### POST /schedules/:id/publish
+Publica escala e notifica funcionários.
+
+**Request:**
+```json
+{}
+```
+
+**Response (200):**
+```json
+{
+  "schedule": {
+    "id": "uuid",
+    "status": "published",
+    "publishedAt": "2025-01-03T14:00:00Z"
+  },
+  "notifications": {
+    "sent": 5,
+    "failed": 0
+  }
+}
+```
+
+---
+
+### 4.5 Trocas
+
+#### GET /establishments/:id/swap-requests
+Lista pedidos de troca pendentes.
+
+**Query params:**
+- `status`: Filtrar por status
+
+**Response (200):**
+```json
+{
+  "swapRequests": [
+    {
+      "id": "sr1",
+      "requester": { "id": "e1", "name": "João" },
+      "cover": { "id": "e2", "name": "Maria" },
+      "date": "2025-01-10",
+      "shift": { "startTime": "14:00", "endTime": "22:00" },
+      "reason": "Consulta médica",
+      "status": "pending_manager_approval",
+      "requestedAt": "2025-01-08T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### PATCH /swap-requests/:id
+Aprova ou rejeita troca.
+
+**Request:**
+```json
+{
+  "action": "approve"
+}
+```
+
+**Response (200):**
+```json
+{
+  "swapRequest": {
+    "id": "sr1",
+    "status": "approved",
+    "resolvedAt": "2025-01-08T11:30:00Z"
+  }
+}
+```
+
+---
+
+#### POST /schedules/:id/emergency
+Registra ausência de emergência.
+
+**Request:**
+```json
+{
+  "employeeId": "e1",
+  "date": "2025-01-10",
+  "reason": "Doente"
+}
+```
+
+**Response (200):**
+```json
+{
+  "absence": {
+    "employeeId": "e1",
+    "date": "2025-01-10"
+  },
+  "availableForCover": [
+    { "id": "e2", "name": "Maria", "note": "Está de folga" },
+    { "id": "e3", "name": "Pedro", "note": "Entra às 14h, pode vir antes" }
+  ]
+}
+```
+
+---
+
+#### POST /schedules/:id/emergency/request-cover
+Pede cobertura para emergência.
+
+**Request:**
+```json
+{
+  "absentEmployeeId": "e1",
+  "coverEmployeeId": "e2",
+  "date": "2025-01-10"
+}
+```
+
+**Response (200):**
+```json
+{
+  "status": "request_sent",
+  "message": "Pedido enviado para Maria via WhatsApp"
+}
+```
+
+---
+
+### 4.6 Webhooks WhatsApp
+
+#### POST /webhooks/whatsapp
+Recebe mensagens do WhatsApp.
+
+**Request (from WhatsApp):**
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "changes": [{
+      "value": {
+        "messages": [{
+          "from": "5511999991111",
+          "type": "text",
+          "text": { "body": "Não posso trabalhar quarta" }
+        }]
+      }
+    }]
+  }]
+}
+```
+
+**Response:** 200 OK
+
+---
+
+## 5. User Stories
+
+### 5.1 Épico: Onboarding do Gerente
+
+#### US-001: Login com WhatsApp
+**Como** gerente
+**Quero** fazer login usando meu número de WhatsApp
+**Para** acessar o sistema sem criar senha
+
+**Critérios de Aceite:**
+- [ ] Campo para digitar número com máscara (XX) XXXXX-XXXX
+- [ ] Validação de número brasileiro (11 dígitos)
+- [ ] Envio de SMS com código de 6 dígitos
+- [ ] Código expira em 5 minutos
+- [ ] Máximo 3 tentativas de código errado
+- [ ] Rate limit: 3 SMS por hora por número
+- [ ] Se número não existe, cria conta automaticamente
+
+**Dependências:** Nenhuma
+
+**Prioridade:** P0 (Crítico)
+
+---
+
+#### US-002: Configurar Nome e Tipo do Estabelecimento
+**Como** gerente
+**Quero** informar o nome e tipo do meu negócio
+**Para** personalizar o sistema
+
+**Critérios de Aceite:**
+- [ ] Campo de texto para nome (3-100 caracteres)
+- [ ] Seleção de tipo: Restaurante, Loja, Bar, Outro
+- [ ] Botão continuar só ativo quando preenchido
+- [ ] Persistir dados ao sair e voltar
+
+**Dependências:** US-001
+
+**Prioridade:** P0
+
+---
+
+#### US-003: Configurar Horários de Funcionamento
+**Como** gerente
+**Quero** definir os dias e horários que meu negócio abre
+**Para** que o sistema gere escalas válidas
+
+**Critérios de Aceite:**
+- [ ] Toggle para cada dia da semana (seg-dom)
+- [ ] Opção "mesmo horário todos os dias" ou "diferente por dia"
+- [ ] Time picker para horário de abertura e fechamento
+- [ ] Validação: fechamento > abertura
+- [ ] Suporte a fechamento após meia-noite (ex: 18h-02h)
+- [ ] Default: seg-sáb, 10h-22h
+
+**Dependências:** US-002
+
+**Prioridade:** P0
+
+---
+
+#### US-004: Configurar Equipe Mínima
+**Como** gerente
+**Quero** definir quantas pessoas preciso por turno
+**Para** que o sistema não crie escalas insuficientes
+
+**Critérios de Aceite:**
+- [ ] Stepper numérico (1-20)
+- [ ] Default: 3
+- [ ] Texto explicativo sobre o uso
+
+**Dependências:** US-003
+
+**Prioridade:** P0
+
+---
+
+#### US-005: Configurar Regras de Troca
+**Como** gerente
+**Quero** definir se e como funcionários podem trocar turnos
+**Para** controlar a flexibilidade da escala
+
+**Critérios de Aceite:**
+- [ ] Opção 1: Sim, com minha aprovação (default)
+- [ ] Opção 2: Sim, sem precisar aprovar
+- [ ] Opção 3: Não permitir trocas
+- [ ] Se trocas permitidas: stepper para limite mensal (0-10, 0=ilimitado)
+- [ ] Default: 2 trocas/mês
+
+**Dependências:** US-004
+
+**Prioridade:** P0
+
+---
+
+#### US-006: Adicionar Funcionários Manualmente
+**Como** gerente
+**Quero** cadastrar meus funcionários com nome e WhatsApp
+**Para** que eles recebam a escala
+
+**Critérios de Aceite:**
+- [ ] Campos: Nome (obrigatório), WhatsApp (obrigatório)
+- [ ] Máscara de telefone brasileiro
+- [ ] Validação de número duplicado
+- [ ] Botão "+ Adicionar mais"
+- [ ] Lista mostrando funcionários adicionados
+- [ ] Opção de remover antes de confirmar
+- [ ] Mínimo 2 funcionários para continuar
+
+**Dependências:** US-005
+
+**Prioridade:** P0
+
+---
+
+#### US-007: Enviar Convites para Equipe
+**Como** gerente
+**Quero** enviar convites para meus funcionários via WhatsApp
+**Para** que eles informem suas restrições
+
+**Critérios de Aceite:**
+- [ ] Botão "Enviar Convites"
+- [ ] Confirmação antes de enviar
+- [ ] Loading durante envio
+- [ ] Feedback de sucesso/erro por funcionário
+- [ ] Mensagem do convite conforme template aprovado
+- [ ] Marcar estabelecimento como "active" após envio
+
+**Dependências:** US-006
+
+**Prioridade:** P0
+
+---
+
+### 5.2 Épico: Coleta de Restrições
+
+#### US-008: Receber Convite (Funcionário)
+**Como** funcionário
+**Quero** receber uma mensagem perguntando minha disponibilidade
+**Para** informar quando não posso trabalhar
+
+**Critérios de Aceite:**
+- [ ] Mensagem personalizada com nome do funcionário e estabelecimento
+- [ ] Exemplos de como responder
+- [ ] Mensagem chega via WhatsApp Business API
+- [ ] Registro de envio no sistema
+
+**Dependências:** US-007
+
+**Prioridade:** P0
+
+---
+
+#### US-009: Informar Restrições (Funcionário)
+**Como** funcionário
+**Quero** responder com meus horários indisponíveis
+**Para** que sejam considerados na escala
+
+**Critérios de Aceite:**
+- [ ] Aceitar texto livre em português
+- [ ] Gemini interpreta e extrai restrições
+- [ ] Sistema confirma entendimento: "Entendi: Terça e Quinta depois das 18h"
+- [ ] Botões [Sim] [Corrigir] para confirmar
+- [ ] Se corrigir, pede para reformular
+- [ ] Após confirmação, atualiza status para "active"
+
+**Exemplos de input:**
+- "Quarta não posso" → full_day, dayOfWeek=3
+- "Terça e quinta depois das 18h" → time_range, days=[2,4], start=18:00
+- "Posso qualquer horário" → sem restrições
+- "Domingo nunca" → full_day, dayOfWeek=0
+
+**Dependências:** US-008
+
+**Prioridade:** P0
+
+---
+
+#### US-010: Lembrete de Restrições
+**Como** sistema
+**Quero** enviar lembrete para quem não respondeu
+**Para** maximizar taxa de resposta
+
+**Critérios de Aceite:**
+- [ ] Lembrete 24h antes do prazo (configurável)
+- [ ] Lembrete final no prazo
+- [ ] Após prazo, marca como "disponível" automaticamente
+- [ ] Notifica gerente sobre quem não respondeu
+
+**Dependências:** US-009
+
+**Prioridade:** P1
+
+---
+
+#### US-011: Aprovar/Rejeitar Restrições (Gerente)
+**Como** gerente
+**Quero** ver e aprovar as restrições dos funcionários
+**Para** validar antes de gerar a escala
+
+**Critérios de Aceite:**
+- [ ] Tela listando todos funcionários
+- [ ] Status: ✅ Disponível, ⏳ Aguardando, ⚠️ Pendente
+- [ ] Para pendentes: mostrar restrição e motivo
+- [ ] Botões [Aprovar] [Recusar]
+- [ ] Se recusar, funcionário é notificado
+- [ ] Botão "Gerar Escala" quando todos processados ou prazo expirou
+
+**Dependências:** US-009
+
+**Prioridade:** P0
+
+---
+
+### 5.3 Épico: Geração de Escala
+
+#### US-012: Gerar Escala Automaticamente
+**Como** gerente
+**Quero** que o sistema crie a escala automaticamente
+**Para** não ter que fazer manualmente
+
+**Critérios de Aceite:**
+- [ ] Considera horários de funcionamento
+- [ ] Respeita restrições aprovadas
+- [ ] Garante mínimo de pessoas por turno
+- [ ] Garante 1 folga semanal por funcionário (CLT)
+- [ ] Distribui turnos de forma justa
+- [ ] Evita mais de 6 dias consecutivos
+- [ ] Mostra grid com escala gerada
+- [ ] Mostra validações (erros e avisos)
+
+**Algoritmo:**
+1. Listar todos os dias que o estabelecimento abre
+2. Para cada dia, calcular funcionários disponíveis
+3. Distribuir considerando:
+   - Restrições individuais
+   - Histórico de turnos (justiça)
+   - Proximidade de folga anterior
+4. Validar resultado
+
+**Dependências:** US-011
+
+**Prioridade:** P0
+
+---
+
+#### US-013: Ajustar Escala Manualmente
+**Como** gerente
+**Quero** fazer ajustes na escala gerada
+**Para** resolver casos especiais
+
+**Critérios de Aceite:**
+- [ ] Toque em célula da grid para editar
+- [ ] Opções: Dar folga, Escalar, Trocar
+- [ ] Validação em tempo real (mostra se ficou inválido)
+- [ ] Sugestões de quem pode cobrir
+- [ ] Histórico de alterações na sessão (undo)
+
+**Dependências:** US-012
+
+**Prioridade:** P0
+
+---
+
+#### US-014: Resolver Conflitos
+**Como** gerente
+**Quero** ver e resolver conflitos de disponibilidade
+**Para** completar a escala
+
+**Critérios de Aceite:**
+- [ ] Destacar dias com problema (menos gente que o mínimo)
+- [ ] Mostrar quem pediu folga e motivos
+- [ ] Permitir selecionar quem vai trabalhar mesmo assim
+- [ ] Notificar funcionário que teve folga negada
+
+**Dependências:** US-012
+
+**Prioridade:** P0
+
+---
+
+#### US-015: Publicar Escala
+**Como** gerente
+**Quero** publicar a escala para a equipe
+**Para** que todos saibam quando trabalham
+
+**Critérios de Aceite:**
+- [ ] Botão "Publicar Escala"
+- [ ] Confirmação com resumo
+- [ ] Enviar mensagem individual para cada funcionário
+- [ ] Mensagem mostra apenas turnos daquele funcionário
+- [ ] Incluir link para ver escala completa
+- [ ] Atualizar status para "published"
+- [ ] Feedback de envio (X enviados, Y falhas)
+
+**Dependências:** US-013
+
+**Prioridade:** P0
+
+---
+
+### 5.4 Épico: Trocas de Turno
+
+#### US-016: Solicitar Troca (Funcionário)
+**Como** funcionário
+**Quero** pedir para trocar um turno
+**Para** resolver um imprevisto
+
+**Critérios de Aceite:**
+- [ ] Funcionário envia mensagem "não posso sexta"
+- [ ] Sistema identifica turno e oferece opções
+- [ ] Mostra quem está de folga naquele dia
+- [ ] Botões para pedir cobertura ou falar com gerente
+- [ ] Verificar limite de trocas
+- [ ] Se limite atingido, oferecer pedir exceção
+
+**Dependências:** US-015
+
+**Prioridade:** P0
+
+---
+
+#### US-017: Aceitar Cobertura (Funcionário)
+**Como** funcionário
+**Quero** aceitar cobrir o turno de um colega
+**Para** ajudar a equipe
+
+**Critérios de Aceite:**
+- [ ] Receber mensagem com pedido de cobertura
+- [ ] Mostrar detalhes (quem, quando, horário)
+- [ ] Botões [Sim, posso] [Não posso]
+- [ ] Se aceitar, notificar próximo passo (aprovação do gerente ou automático)
+- [ ] Se recusar, notificar solicitante
+
+**Dependências:** US-016
+
+**Prioridade:** P0
+
+---
+
+#### US-018: Aprovar Troca (Gerente)
+**Como** gerente
+**Quero** aprovar ou rejeitar trocas solicitadas
+**Para** manter controle da escala
+
+**Critérios de Aceite:**
+- [ ] Notificação push quando há troca pendente
+- [ ] Card na home com trocas pendentes
+- [ ] Mostrar: quem pediu, quem cobre, quando, motivo
+- [ ] Botões [Aprovar] [Rejeitar]
+- [ ] Se aprovar, atualizar escala automaticamente
+- [ ] Notificar ambos funcionários do resultado
+
+**Dependências:** US-017
+
+**Prioridade:** P0
+
+---
+
+#### US-019: Notificar Escala Atualizada
+**Como** sistema
+**Quero** avisar todos sobre mudanças na escala
+**Para** que ninguém fique desatualizado
+
+**Critérios de Aceite:**
+- [ ] Após troca aprovada, enviar resumo da mudança
+- [ ] Mostrar o que mudou (antes → depois)
+- [ ] Enviar para todos os funcionários afetados no dia
+
+**Dependências:** US-018
+
+**Prioridade:** P1
+
+---
+
+### 5.5 Épico: Emergências
+
+#### US-020: Registrar Ausência de Emergência
+**Como** gerente
+**Quero** registrar que alguém faltou de última hora
+**Para** encontrar cobertura rapidamente
+
+**Critérios de Aceite:**
+- [ ] Botão "Alguém Faltou" na home
+- [ ] Listar funcionários escalados hoje
+- [ ] Selecionar quem faltou
+- [ ] Mostrar opções de cobertura:
+  - Quem está de folga
+  - Quem pode fazer hora extra
+- [ ] Ordenar por "probabilidade" (folga > hora extra)
+
+**Dependências:** US-015
+
+**Prioridade:** P0
+
+---
+
+#### US-021: Pedir Cobertura de Emergência
+**Como** gerente
+**Quero** pedir para alguém cobrir uma emergência
+**Para** não ficar desfalcado
+
+**Critérios de Aceite:**
+- [ ] Selecionar quem pedir
+- [ ] Enviar mensagem urgente via WhatsApp
+- [ ] Mensagem marcada como urgente (emoji 🆘)
+- [ ] Aguardar resposta
+- [ ] Se aceitar, atualizar escala imediatamente
+- [ ] Notificar gerente do resultado
+
+**Dependências:** US-020
+
+**Prioridade:** P0
+
+---
+
+### 5.6 Épico: Visualização
+
+#### US-022: Tela Home do Gerente
+**Como** gerente
+**Quero** ver um resumo do dia e pendências
+**Para** ter visão rápida da situação
+
+**Critérios de Aceite:**
+- [ ] Mostrar "Hoje" com data
+- [ ] Listar quem trabalha hoje e horários
+- [ ] Botão "Alguém Faltou" destacado
+- [ ] Seção de pendências (trocas, restrições)
+- [ ] Resumo da semana (calendário compacto)
+- [ ] Bottom nav: Escala, Equipe, Config
+
+**Dependências:** US-015
+
+**Prioridade:** P0
+
+---
+
+#### US-023: Ver Escala Semanal
+**Como** gerente
+**Quero** ver a escala completa da semana
+**Para** ter visão geral
+
+**Critérios de Aceite:**
+- [ ] Grid: dias (colunas) x funcionários (linhas)
+- [ ] Indicador visual: trabalha/folga
+- [ ] Navegar entre semanas
+- [ ] Toque para editar (se rascunho)
+- [ ] Mostrar contagem por dia
+
+**Dependências:** US-015
+
+**Prioridade:** P1
+
+---
+
+#### US-024: Ver Escala Individual (Funcionário)
+**Como** funcionário
+**Quero** ver minha escala quando quiser
+**Para** confirmar meus horários
+
+**Critérios de Aceite:**
+- [ ] Enviar "qual minha escala" no WhatsApp
+- [ ] Sistema responde com escala da semana atual
+- [ ] Incluir link para página web com escala
+
+**Dependências:** US-015
+
+**Prioridade:** P1
+
+---
+
+## 6. Fluxos de Conversa WhatsApp
+
+### 6.1 Convite Inicial
+
+```
+TRIGGER: Gerente clica "Enviar Convites"
+
+BOT → FUNCIONÁRIO:
+"Oi {nome}! 👋
+
+Seu gerente {nomeGerente} cadastrou você no Escala Simples
+do {nomeEstabelecimento}.
+
+Agora você vai receber sua escala por aqui e pode
+pedir trocas de turno quando precisar.
+
+Pra começar, me conta:
+Tem algum dia/horário fixo que você NÃO PODE trabalhar?
+
+Exemplos:
+• "Quarta de manhã tenho faculdade"
+• "Domingo não posso"
+• "Posso qualquer horário"
+
+Responde aí 👇"
+
+STATE: awaiting_restrictions
+```
+
+### 6.2 Processamento de Restrições
+
+```
+TRIGGER: Mensagem recebida em STATE: awaiting_restrictions
+
+1. Enviar texto para Gemini com prompt:
+   "Extraia restrições de disponibilidade desta mensagem.
+    Retorne JSON com: [{dayOfWeek, type, startTime?, endTime?}]
+    dayOfWeek: 0=domingo, 1=segunda...
+    type: 'full_day' ou 'time_range'"
+
+2. Se Gemini retornar restrições:
+
+BOT → FUNCIONÁRIO:
+"Entendi! ✓
+
+Suas restrições:
+• {lista formatada}
+
+Tá certo isso?"
+
+BUTTONS: [Sim] [Corrigir]
+STATE: confirming_restrictions
+
+3. Se Gemini não conseguir extrair:
+
+BOT → FUNCIONÁRIO:
+"Não entendi bem 😅
+
+Pode reformular? Por exemplo:
+• 'Segunda não posso'
+• 'Terça e quinta depois das 19h'
+• 'Posso qualquer horário'"
+
+STATE: awaiting_restrictions (mantém)
+```
+
+### 6.3 Escala Publicada
+
+```
+TRIGGER: Gerente publica escala
+
+BOT → FUNCIONÁRIO:
+"📅 Escala - {nomeEstabelecimento}
+Semana {dataInicio} - {dataFim}
+
+Sua escala, {nome}:
+
+{para cada dia}
+{emoji} {diaSemana} {data}: {status}
+{/para cada dia}
+
+Precisa trocar algum dia? Responde aqui."
+
+Onde:
+- emoji: ✅ se trabalha, ❌ se folga
+- status: horário se trabalha, "Folga" ou "Fechado"
+```
+
+### 6.4 Pedido de Troca
+
+```
+TRIGGER: Funcionário envia algo como "não posso {dia}"
+
+1. Identificar dia mencionado
+2. Verificar se está escalado nesse dia
+3. Verificar limite de trocas
+
+BOT → FUNCIONÁRIO:
+"Entendi. {dia} você está escalado {horário}.
+
+Você ainda tem {X} trocas disponíveis este mês.
+
+Quem está de folga {dia}:
+• {nome1}
+• {nome2}
+
+Quer pedir para alguém cobrir?"
+
+BUTTONS: [Pedir {nome1}] [Pedir {nome2}] [Falar com gerente]
+STATE: requesting_swap
+```
+
+### 6.5 Pedido de Cobertura
+
+```
+TRIGGER: Funcionário A pediu troca, funcionário B selecionado
+
+BOT → FUNCIONÁRIO B:
+"Oi {nome}! 👋
+
+{nomeA} não pode trabalhar {dia} ({horário}).
+Você pode cobrir?
+
+[Sim, posso] [Não posso]"
+
+STATE: awaiting_cover_response
+```
+
+### 6.6 Cobertura de Emergência
+
+```
+TRIGGER: Gerente solicita cobertura de emergência
+
+BOT → FUNCIONÁRIO:
+"🆘 URGENTE
+
+{nomeAusente} não pode trabalhar hoje.
+Você pode cobrir {horário}?
+
+{nomeGerente} está pedindo.
+
+[Sim] [Não posso]"
+
+STATE: awaiting_emergency_response
+```
+
+---
+
+## 7. Regras de Negócio
+
+### 7.1 Validações de Escala
+
+| Regra | Tipo | Descrição |
+|-------|------|-----------|
+| MIN_EMPLOYEES | Error | Mínimo de funcionários por turno |
+| WEEKLY_REST | Error | Mínimo 1 folga semanal (CLT) |
+| MAX_CONSECUTIVE | Warning | Máximo 6 dias consecutivos |
+| RESTRICTION_CONFLICT | Error | Funcionário escalado em horário restrito |
+| INTER_SHIFT_REST | Warning | Mínimo 11h entre turnos (CLT) |
+
+### 7.2 Limites do Sistema
+
+| Parâmetro | Limite | Justificativa |
+|-----------|--------|---------------|
+| Funcionários por estabelecimento | 50 | Performance |
+| Estabelecimentos por gerente | 1 (MVP) | Simplicidade |
+| Trocas por mês por funcionário | 0-10 (config) | Controle |
+| Prazo para restrições | 72h (config) | Tempo de processamento |
+| Reenvio de convite | 1x por dia | Anti-spam |
+
+### 7.3 Timeouts
+
+| Evento | Timeout | Ação |
+|--------|---------|------|
+| Código SMS | 5 min | Expirar, pedir novo |
+| Resposta de restrição | 72h | Assumir disponível |
+| Resposta de cobertura | 2h | Notificar solicitante |
+| Resposta de emergência | 30 min | Sugerir próximo |
+| Aprovação de troca (gerente) | 24h | Notificar pendente |
+
+---
+
+## 8. Componentes de UI
+
+### 8.1 App do Gerente
+
+#### Telas
+
+| Tela | Descrição | Componentes Principais |
+|------|-----------|------------------------|
+| Login | Entrada do número | PhoneInput, Button |
+| VerifyCode | Digitar código | CodeInput (6 digits), Timer |
+| Onboarding/Name | Nome e tipo | TextInput, SegmentedControl |
+| Onboarding/Hours | Horários | DayToggle[], TimePicker |
+| Onboarding/MinEmployees | Mínimo | Stepper |
+| Onboarding/Swaps | Regras troca | RadioGroup, Stepper |
+| Onboarding/Team | Adicionar equipe | EmployeeList, AddEmployeeModal |
+| Onboarding/Invite | Enviar convites | Button, ProgressIndicator |
+| Home | Dashboard | TodayCard, PendingList, WeekPreview |
+| Schedule | Escala semanal | ScheduleGrid, DayColumn, ShiftCell |
+| Team | Lista funcionários | EmployeeCard[], StatusBadge |
+| Settings | Configurações | SettingRow[] |
+| Restrictions | Aprovar restrições | RestrictionCard[], ApproveButton |
+| Emergency | Ausência emergência | EmployeeSelector, CoverOptions |
+
+#### Componentes Reutilizáveis
+
+| Componente | Props | Descrição |
+|------------|-------|-----------|
+| PhoneInput | value, onChange, country | Input com máscara |
+| CodeInput | length, onComplete | Input de código |
+| Button | variant, loading, disabled | Botão primário/secundário |
+| Stepper | value, min, max, onChange | Incremento/decremento |
+| TimePicker | value, onChange | Seletor de hora |
+| DayToggle | day, selected, onChange | Toggle de dia |
+| EmployeeCard | employee, onPress | Card de funcionário |
+| StatusBadge | status | Badge colorido |
+| ShiftCell | shift, onPress | Célula da escala |
+| PendingCard | item, onApprove, onReject | Card de pendência |
+
+### 8.2 Estados de Loading
+
+| Ação | Tipo | Feedback |
+|------|------|----------|
+| Login | Full screen | Spinner + "Enviando código..." |
+| Verificar código | Button | Button loading |
+| Salvar configuração | Button | Button loading |
+| Enviar convites | Full screen | Progress + contagem |
+| Gerar escala | Full screen | Spinner + "Gerando escala..." |
+| Publicar escala | Full screen | Progress + contagem |
+| Aprovar/Rejeitar | Button | Button loading |
+
+### 8.3 Estados de Erro
+
+| Erro | Mensagem | Ação |
+|------|----------|------|
+| Número inválido | "Número inválido. Confira e tente novamente." | Destacar campo |
+| Código errado | "Código incorreto. Tente novamente." | Limpar campo |
+| Código expirado | "Código expirado. Solicite um novo." | Botão reenviar |
+| Sem conexão | "Sem internet. Verifique sua conexão." | Botão tentar novamente |
+| Erro servidor | "Algo deu errado. Tente novamente." | Botão tentar novamente |
+| WhatsApp falhou | "Não foi possível enviar para X." | Retry individual |
+
+---
+
+## 9. Fases de Desenvolvimento
+
+### Fase 1: Fundação (Semanas 1-2)
+
+**Objetivo:** Setup técnico e autenticação
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Setup projeto React Native + Expo | Criar projeto, configurar navegação | 4h |
+| Setup GCP (Cloud Run, Firestore) | Infraestrutura backend | 4h |
+| Implementar autenticação SMS | Envio de código, verificação | 8h |
+| Telas de login e código | UI de autenticação | 6h |
+| Modelo de dados base | Firestore schemas | 4h |
+| API de autenticação | Endpoints auth/* | 6h |
+
+**Entregável:** Login funcional com SMS
+
+---
+
+### Fase 2: Onboarding (Semanas 3-4)
+
+**Objetivo:** Fluxo completo de configuração
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Tela nome/tipo estabelecimento | UI + API | 4h |
+| Tela horários funcionamento | UI complexa + API | 8h |
+| Tela equipe mínima | UI + API | 3h |
+| Tela regras de troca | UI + API | 4h |
+| Tela adicionar funcionários | Lista + modal + API | 8h |
+| Tela enviar convites | UI + integração WhatsApp | 6h |
+| Persistência de estado | Voltar onde parou | 4h |
+
+**Entregável:** Onboarding completo funcionando
+
+---
+
+### Fase 3: WhatsApp Integration (Semanas 5-6)
+
+**Objetivo:** Comunicação bidirecional com funcionários
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Setup WhatsApp Business API | Configuração Meta | 4h |
+| Webhook de recebimento | Cloud Function | 6h |
+| Templates de mensagem | Aprovação Meta | 4h |
+| Envio de mensagens | Service de envio | 6h |
+| Integração com Gemini | Processamento NLP | 8h |
+| Fluxo de restrições | Conversa completa | 8h |
+| Testes de conversa | Cenários diversos | 6h |
+
+**Entregável:** Funcionários podem informar restrições via WhatsApp
+
+---
+
+### Fase 4: Geração de Escala (Semanas 7-8)
+
+**Objetivo:** Criar escalas automaticamente
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Tela de restrições pendentes | UI gerente | 6h |
+| Algoritmo de geração | Lógica de distribuição | 12h |
+| Validações CLT | Regras de negócio | 6h |
+| Tela de escala gerada | Grid interativo | 10h |
+| Edição manual de escala | Ajustes na grid | 8h |
+| Resolução de conflitos | UI de conflitos | 6h |
+| Publicação de escala | Envio em massa | 6h |
+
+**Entregável:** Gerente pode gerar e publicar escalas
+
+---
+
+### Fase 5: Trocas (Semanas 9-10)
+
+**Objetivo:** Permitir trocas entre funcionários
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Fluxo de solicitação (WhatsApp) | Conversa de troca | 8h |
+| Fluxo de aceite (WhatsApp) | Resposta do colega | 6h |
+| Tela de aprovação (Gerente) | Cards de pendências | 6h |
+| Atualização automática de escala | Após aprovação | 4h |
+| Notificação de mudanças | Broadcast WhatsApp | 4h |
+| Limite de trocas | Controle mensal | 4h |
+| Pedir exceção | Fluxo extra | 4h |
+
+**Entregável:** Sistema completo de trocas
+
+---
+
+### Fase 6: Emergências e Polish (Semanas 11-12)
+
+**Objetivo:** Fluxo de emergência e refinamentos
+
+| Task | Descrição | Estimativa |
+|------|-----------|------------|
+| Tela de emergência | "Alguém faltou" | 6h |
+| Sugestão de cobertura | Algoritmo | 4h |
+| Pedido urgente (WhatsApp) | Mensagem prioritária | 4h |
+| Home do gerente | Dashboard consolidado | 8h |
+| Visualização semanal | Tela de escala | 6h |
+| Push notifications | Firebase Cloud Messaging | 6h |
+| Testes E2E | Fluxos completos | 8h |
+| Bug fixes e polish | Refinamentos | 16h |
+
+**Entregável:** MVP completo e testado
+
+---
+
+## 10. Métricas de Sucesso
+
+### 10.1 North Star Metric
+
+> **Escalas publicadas por semana**
+
+### 10.2 Métricas por Fase
+
+| Fase | Métrica | Meta |
+|------|---------|------|
+| Onboarding | Tempo de setup | < 10 min |
+| Onboarding | Taxa de conclusão | > 70% |
+| Restrições | Taxa de resposta funcionários | > 70% |
+| Escala | Tempo para gerar | < 30 seg |
+| Escala | Escalas publicadas D1 | > 50% |
+| Trocas | Trocas resolvidas automaticamente | > 80% |
+| Engajamento | Retenção D7 | > 60% |
+| Engajamento | Retenção D30 | > 40% |
+
+### 10.3 Eventos de Analytics
+
+| Evento | Parâmetros |
+|--------|------------|
+| onboarding_started | - |
+| onboarding_step_completed | step_number, step_name |
+| onboarding_completed | total_time_seconds |
+| employee_added | count |
+| invites_sent | count, success_count |
+| restriction_received | employee_id |
+| restriction_approved | employee_id |
+| schedule_generated | employee_count, day_count |
+| schedule_edited | edit_count |
+| schedule_published | employee_count |
+| swap_requested | requester_id |
+| swap_accepted | cover_id |
+| swap_approved | - |
+| swap_rejected | - |
+| emergency_started | - |
+| emergency_resolved | time_to_resolve_minutes |
+
+---
+
+## 11. Considerações de Segurança
+
+### 11.1 Autenticação
+
+- Códigos SMS expiram em 5 minutos
+- Máximo 3 tentativas de código errado
+- Rate limit: 3 SMS por hora por número
+- Tokens JWT com expiração de 30 dias
+- Refresh token rotation
+
+### 11.2 Autorização
+
+- Gerente só acessa seu estabelecimento
+- Funcionário só vê própria escala
+- Validar ownership em todas as operações
+- Audit log de ações sensíveis
+
+### 11.3 Dados
+
+- Números de telefone com hash em logs
+- Firestore security rules
+- HTTPS obrigatório
+- Backup diário
+
+---
+
+## 12. Considerações de Performance
+
+### 12.1 Alvos
+
+| Operação | Alvo |
+|----------|------|
+| Tempo de loading inicial | < 2s |
+| Geração de escala | < 5s |
+| Envio de mensagens (batch) | < 30s para 50 funcionários |
+| Response time API | < 200ms (p95) |
+
+### 12.2 Otimizações
+
+- Paginação de listas (20 items)
+- Cache de dados frequentes
+- Lazy loading de telas
+- Compressão de imagens
+- Debounce em buscas
+
+---
+
+## 13. Glossário
+
+| Termo | Definição |
+|-------|-----------|
+| Estabelecimento | Restaurante, loja ou bar onde os funcionários trabalham |
+| Gerente | Usuário que administra o estabelecimento (dono ou gerente) |
+| Funcionário | Pessoa que trabalha no estabelecimento (horista) |
+| Restrição | Horário/dia que funcionário NÃO pode trabalhar |
+| Escala | Distribuição de turnos para uma semana |
+| Turno | Período de trabalho de um funcionário em um dia |
+| Troca | Substituição de um funcionário por outro em um turno |
+| Cobertura | Quando um funcionário assume turno de outro |
+
+---
+
+*PRD - Escala Simples*
+*Versão 2.0 - 28/12/2024*
+*Ready for Development*

@@ -1,0 +1,150 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if user is manager of establishment
+    function isManagerOf(establishmentId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/establishments/$(establishmentId)) &&
+        get(/databases/$(database)/documents/establishments/$(establishmentId)).data.managerId == request.auth.uid;
+    }
+
+    // =========================================================================
+    // MANAGERS
+    // =========================================================================
+
+    match /managers/{managerId} {
+      // Managers can read and update their own profile
+      allow read, update: if isOwner(managerId);
+      // Create on first auth
+      allow create: if isAuthenticated() && request.auth.uid == managerId;
+      // No delete allowed
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // ESTABLISHMENTS
+    // =========================================================================
+
+    match /establishments/{establishmentId} {
+      // Manager can read their establishments
+      allow read: if isAuthenticated() &&
+        resource.data.managerId == request.auth.uid;
+
+      // Manager can create establishment
+      allow create: if isAuthenticated() &&
+        request.resource.data.managerId == request.auth.uid;
+
+      // Manager can update their establishment
+      allow update: if isAuthenticated() &&
+        resource.data.managerId == request.auth.uid;
+
+      // No delete allowed
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // EMPLOYEES
+    // =========================================================================
+
+    match /employees/{employeeId} {
+      // Manager can read employees of their establishments
+      allow read: if isManagerOf(resource.data.establishmentId);
+
+      // Manager can create employees for their establishments
+      allow create: if isManagerOf(request.resource.data.establishmentId);
+
+      // Manager can update employees of their establishments
+      allow update: if isManagerOf(resource.data.establishmentId);
+
+      // Manager can delete (deactivate) employees
+      allow delete: if isManagerOf(resource.data.establishmentId);
+    }
+
+    // =========================================================================
+    // SCHEDULES
+    // =========================================================================
+
+    match /schedules/{scheduleId} {
+      // Manager can read schedules of their establishments
+      allow read: if isManagerOf(resource.data.establishmentId);
+
+      // Manager can create schedules for their establishments
+      allow create: if isManagerOf(request.resource.data.establishmentId);
+
+      // Manager can update schedules of their establishments
+      allow update: if isManagerOf(resource.data.establishmentId);
+
+      // No delete allowed
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // SHIFTS
+    // =========================================================================
+
+    match /shifts/{shiftId} {
+      // Manager can read shifts via schedule
+      allow read: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)) &&
+        isManagerOf(get(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)).data.establishmentId);
+
+      // Manager can create shifts
+      allow create: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/schedules/$(request.resource.data.scheduleId)) &&
+        isManagerOf(get(/databases/$(database)/documents/schedules/$(request.resource.data.scheduleId)).data.establishmentId);
+
+      // Manager can update shifts
+      allow update: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)) &&
+        isManagerOf(get(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)).data.establishmentId);
+
+      // No delete allowed
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // SWAP REQUESTS
+    // =========================================================================
+
+    match /swapRequests/{swapId} {
+      // Manager can read swap requests via schedule
+      allow read: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)) &&
+        isManagerOf(get(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)).data.establishmentId);
+
+      // Swap requests are created by Cloud Functions (from WhatsApp)
+      // Manager can update (approve/reject)
+      allow update: if isAuthenticated() &&
+        exists(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)) &&
+        isManagerOf(get(/databases/$(database)/documents/schedules/$(resource.data.scheduleId)).data.establishmentId);
+
+      // No direct create/delete from client
+      allow create, delete: if false;
+    }
+
+    // =========================================================================
+    // WHATSAPP MESSAGES
+    // =========================================================================
+
+    match /whatsappMessages/{messageId} {
+      // Only Cloud Functions can read/write WhatsApp messages
+      allow read, write: if false;
+    }
+  }
+}

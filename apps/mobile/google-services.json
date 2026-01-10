@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "47416126458",
+    "project_id": "escala-simples-482616",
+    "storage_bucket": "escala-simples-482616.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:47416126458:android:b878e7f605ea76b5a59243",
+        "android_client_info": {
+          "package_name": "com.escalasimples.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "47416126458-il76it6jcg5tlvj6tcefhnt8akllvc4g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgWqXayIdzyy7Y9Vdl8Ue8TDPfiU2bK5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "47416126458-il76it6jcg5tlvj6tcefhnt8akllvc4g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "47416126458-of8i00jsjk4hjptg7icf08kkut7p182p.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.escalasimples.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
