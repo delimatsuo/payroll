@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeOut, Layout } from 'react-native-reanimated';
 import { colors, spacing, fontSize, borderRadius, shadows } from '../../src/theme';
 import { api } from '../../src/services/api';
+import { pickContact } from '../../src/services/contacts';
 
 interface EmployeeInput {
   id: string;
@@ -59,6 +60,34 @@ export default function OnboardingTeamScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEmployees((prev) => [...prev, { id: generateId(), name: '', phone: '' }]);
   }, []);
+
+  const handlePickFromContacts = useCallback(async () => {
+    const contact = await pickContact();
+
+    if (contact) {
+      // Check if we have an empty slot to fill
+      const emptySlotIndex = employees.findIndex(
+        (emp) => emp.name.trim() === '' && emp.phone.replace(/\D/g, '') === ''
+      );
+
+      if (emptySlotIndex >= 0) {
+        // Fill the empty slot
+        setEmployees((prev) =>
+          prev.map((emp, idx) =>
+            idx === emptySlotIndex
+              ? { ...emp, name: contact.name, phone: contact.phone }
+              : emp
+          )
+        );
+      } else {
+        // Add new employee with contact data
+        setEmployees((prev) => [
+          ...prev,
+          { id: generateId(), name: contact.name, phone: contact.phone },
+        ]);
+      }
+    }
+  }, [employees]);
 
   const handleRemoveEmployee = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -219,23 +248,36 @@ export default function OnboardingTeamScreen() {
             </Animated.View>
           ))}
 
-          {/* Add More Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.addButton,
-              pressed && styles.addButtonPressed,
-            ]}
-            onPress={handleAddEmployee}
-          >
-            <Ionicons name="add-circle" size={24} color={colors.primary[600]} />
-            <Text style={styles.addButtonText}>Adicionar funcionário</Text>
-          </Pressable>
+          {/* Add Buttons */}
+          <View style={styles.addButtonsContainer}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.addButtonPrimary,
+                pressed && styles.addButtonPressed,
+              ]}
+              onPress={handlePickFromContacts}
+            >
+              <Ionicons name="people" size={22} color={colors.primary[600]} />
+              <Text style={styles.addButtonText}>Escolher dos contatos</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.addButtonSecondary,
+                pressed && styles.addButtonSecondaryPressed,
+              ]}
+              onPress={handleAddEmployee}
+            >
+              <Ionicons name="create-outline" size={20} color={colors.text.secondary} />
+              <Text style={styles.addButtonSecondaryText}>Digitar manualmente</Text>
+            </Pressable>
+          </View>
 
           {/* Info Card */}
           <View style={styles.infoCard}>
             <Ionicons name="information-circle" size={20} color={colors.info.main} />
             <Text style={styles.infoText}>
-              Os funcionários receberão um convite via WhatsApp para informar suas restrições de horário.
+              Após adicionar, você poderá enviar o PIN de acesso para cada funcionário.
             </Text>
           </View>
         </ScrollView>
@@ -397,15 +439,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     color: colors.text.primary,
   },
-  // Add Button
-  addButton: {
+  // Add Buttons
+  addButtonsContainer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  addButtonPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.md,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
     borderWidth: 2,
     borderStyle: 'dashed',
     borderColor: colors.primary[300],
@@ -419,6 +464,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: '600',
     color: colors.primary[600],
+  },
+  addButtonSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  addButtonSecondaryPressed: {
+    opacity: 0.6,
+  },
+  addButtonSecondaryText: {
+    fontSize: fontSize.footnote,
+    fontWeight: '500',
+    color: colors.text.secondary,
   },
   // Info Card
   infoCard: {
