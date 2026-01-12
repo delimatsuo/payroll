@@ -1,8 +1,9 @@
 # Escala Simples - AI Agent Handover Document
 
-**Last Updated:** January 9, 2026 (Evening)
+**Last Updated:** January 12, 2026
 **Project:** Escala Simples - Scheduling System for Brazilian Restaurants & Retail
 **Status:** In Development (MVP Phase)
+**Framework:** Ralph Autonomous Development
 
 ---
 
@@ -11,7 +12,7 @@
 ### What is Escala Simples?
 
 A Nubank-inspired scheduling system for Brazilian restaurants and retail businesses. The product aims to:
-- Automatically collect employee availability restrictions via WhatsApp
+- Automatically collect employee availability restrictions
 - Generate optimized schedules using AI (Gemini 2.5 Flash)
 - Facilitate shift swaps between employees
 - Notify everyone automatically about changes
@@ -21,7 +22,7 @@ A Nubank-inspired scheduling system for Brazilian restaurants and retail busines
 | User Type | Description | Interface |
 |-----------|-------------|-----------|
 | Manager (Gerente) | Restaurant/store owner or manager | Mobile App (iOS/Android) |
-| Employee (Funcionário) | Hourly worker | Mobile App (simplified) + WhatsApp |
+| Employee (Funcionário) | Hourly worker | Mobile App (simplified) |
 
 ### Core Value Proposition
 
@@ -38,7 +39,7 @@ EMPLOYEE: "Tell us when you can't work, swap with colleagues."
 - **Framework:** React Native + Expo (SDK 52)
 - **Navigation:** expo-router (file-based routing)
 - **Language:** TypeScript
-- **Authentication:** Firebase Auth (@react-native-firebase/auth) for managers, OTP for employees
+- **Authentication:** Firebase Auth for managers, PIN-based for employees
 - **Animations:** react-native-reanimated
 - **Haptics:** expo-haptics
 - **Visual Effects:** expo-blur
@@ -47,16 +48,14 @@ EMPLOYEE: "Tell us when you can't work, swap with colleagues."
 - **Runtime:** Node.js + Express
 - **Language:** TypeScript
 - **Database:** Firebase Firestore
-- **Authentication:** Firebase Admin SDK
+- **Authentication:** Firebase Admin SDK (custom tokens for employees)
 - **Validation:** Zod schemas
-- **WhatsApp:** WhatsApp Business Cloud API
 - **AI:** Gemini 2.5 Flash (for NLP settings changes and schedule generation)
 
 ### Infrastructure
 - **GCP Project:** `escala-simples-482616`
-- **Auth:** Firebase Authentication (Email/Password for managers)
+- **Auth:** Firebase Authentication (Email/Password for managers, Custom tokens for employees)
 - **Database:** Firestore with composite indexes
-- **Messaging:** WhatsApp Business API
 
 ---
 
@@ -67,45 +66,49 @@ EMPLOYEE: "Tell us when you can't work, swap with colleagues."
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Manager Authentication | ✅ Working | Email/password via Firebase |
-| Employee Authentication | ✅ Working | OTP via WhatsApp verification |
+| Employee Authentication | ✅ Working | **PIN-based login** (simplified from OTP) |
 | Establishment Onboarding | ✅ Working | 5-step flow complete |
-| Team Management | ✅ Working | Add/edit/remove employees |
+| Team Management | ✅ Working | Add/edit/remove employees with PIN generation |
+| Employee Invitations | ✅ Working | **Native share** (WhatsApp/SMS/Email via phone share sheet) |
 | Employee Home Screen | ✅ Working | Shows upcoming shifts |
 | Settings (AI Chat) | ✅ Working | Gemini-powered settings changes |
-| Basic Schedule View | ⚠️ Partial | Shows schedule but limited functionality |
+| AI Schedule Generation | ✅ Working | Gemini-powered with CLT validation |
+| Schedule View | ✅ Working | Manager and employee views |
 
-### What's In Progress
+### Recent Work Completed (January 12, 2026)
 
-**Intelligent Schedule System (See Plan Below)**
-- Multiple shift definitions (morning/afternoon/night)
-- 24/7 operation support
-- Timeline visual view
-- Conflict detection
+#### Simplified Employee Invitation & Login Flow
 
-### Recent Work Completed
+Replaced complex WhatsApp Business API integration with simpler alternatives:
 
-1. **Access Control Separation** - Manager and employee views are now properly separated:
-   - `app/(tabs)/` - Manager-only screens
-   - `app/(employee)/` - Employee-only screens
-   - `app/(auth)/login.tsx` - Manager login with link to employee login
+1. **Native Share for Invitations** (replaces WhatsApp Business API)
+   - Managers now use phone's native share sheet to send invites
+   - Can share via WhatsApp, SMS, Email, or any installed app
+   - No Meta Business account or API tokens required
+   - No per-message costs
 
-2. **Employee Authentication Flow**:
-   - OTP verification via WhatsApp
-   - Session stored in AsyncStorage
-   - Auto-routing based on auth state
+2. **PIN-based Employee Login** (replaces OTP via WhatsApp)
+   - 6-digit PIN generated when employee is created
+   - PIN returned to manager once, who shares it with employee
+   - Employee logs in with phone + PIN
+   - Instant login, no waiting for OTP messages
 
-3. **Firestore Indexes** - Deployed required composite indexes for queries
+3. **Files Modified:**
+   - `apps/mobile/src/services/share.ts` (NEW) - Native share functionality
+   - `apps/mobile/app/(tabs)/team.tsx` - Added invite button
+   - `apps/mobile/app/(employee)/login.tsx` - Redesigned for PIN entry
+   - `apps/mobile/src/hooks/useEmployeeAuth.tsx` - Added `loginWithPin()`
+   - `apps/mobile/src/services/api.ts` - Added `pinLogin()`, `createInviteToken()`
+   - `apps/api/src/routes/employees.ts` - Added PIN generation, PIN login endpoint
+   - `apps/api/src/routes/invites.ts` - Added create-token endpoint
 
-4. **React Version Resolution** - Fixed monorepo React version conflicts
+### Previous Work
 
-5. **Security Fix (Jan 9, 2026)** - Fixed leaked Firebase API keys:
-   - Removed `google-services.json` and `GoogleService-Info.plist` from git tracking
-   - Updated `.gitignore` to block Firebase config files
-   - Added pre-commit hook to detect secrets before commit
-   - Deleted compromised API keys via `gcloud` CLI
-   - Regenerated fresh Firebase configs
-   - Created `apps/mobile/FIREBASE_SETUP.md` with setup instructions
-   - Created `.example` template files for new developers
+1. **Access Control Separation** - Manager and employee views properly separated
+2. **Employee Authentication Flow** - Now PIN-based (see above)
+3. **Firestore Indexes** - Deployed required composite indexes
+4. **Security Fix (Jan 9, 2026)** - Fixed leaked Firebase API keys
+5. **AI Schedule Generation** - Fully implemented with Gemini 2.5 Flash
 
 ---
 
@@ -130,12 +133,12 @@ apps/mobile/app/
 ├── (tabs)/                  # Manager main app
 │   ├── _layout.tsx
 │   ├── index.tsx            # Dashboard
-│   ├── team.tsx             # Team management
+│   ├── team.tsx             # Team management + invite via share
 │   ├── schedule.tsx         # Schedule view
 │   └── settings.tsx         # AI chat settings
 └── (employee)/              # Employee screens
     ├── _layout.tsx
-    ├── login.tsx            # OTP login
+    ├── login.tsx            # PIN login (phone + 6-digit PIN)
     ├── home.tsx             # Employee dashboard
     └── availability.tsx     # Set availability
 ```
@@ -146,69 +149,49 @@ apps/mobile/app/
 
 ### 1. Dual Authentication System
 - **Managers:** Firebase Auth (email/password) - full access to establishment
-- **Employees:** OTP verification - limited access to their own data
+- **Employees:** PIN-based login with Firebase custom tokens - limited access
 
-### 2. Apple Human Interface Guidelines (HIG)
+### 2. Simplified Invitation Flow
+- **Native Share:** Uses phone's share functionality instead of WhatsApp Business API
+- **No External Dependencies:** No Meta approval, no API tokens, no costs
+
+### 3. Apple Human Interface Guidelines (HIG)
 All UI follows Apple HIG principles (see CLAUDE.md for details).
 
-### 3. Gemini for NLP
-Settings can be changed via natural language:
-- User: "Abre às 10h na segunda"
-- System interprets and proposes changes
-- User confirms before applying
+### 4. Gemini for NLP and Schedule Generation
+- Settings can be changed via natural language
+- AI generates optimal schedules respecting CLT labor laws
+- Fallback to round-robin when Gemini unavailable
 
-### 4. Brazilian Localization
+### 5. Brazilian Localization
 - All user-facing text in Portuguese
 - Phone mask: `(XX) XXXXX-XXXX`
 - International format: `5511999999999`
 
 ---
 
-## 6. Schedule System Plan (In Progress)
+## 6. AI Schedule Generation (Implemented)
 
-A comprehensive plan exists at `.claude/plans/generic-leaping-fiddle.md`. Key points:
+The system uses Gemini 2.5 Flash for intelligent schedule generation:
 
-### Problem
-Current schedule generation is too basic - hardcoded 2 employees, single shift.
+### How It Works
 
-### Solution: Multiple Shift Definitions
+1. **Input:** Week start date, operating hours, employees with restrictions
+2. **Processing:** Gemini generates optimal shift assignments
+3. **Validation:** Schedule validated against CLT labor laws
+4. **Output:** Draft schedule with warnings/errors
 
-```typescript
-type ShiftDefinition = {
-  id: string;
-  type: 'morning' | 'afternoon' | 'night' | 'custom';
-  label: string;           // "Turno Matutino"
-  startTime: string;       // "06:00"
-  endTime: string;         // "14:00"
-  minEmployees: number;    // 2
-};
+### CLT Validation Rules
+- Minimum 1 day off per week (DSR)
+- Maximum 6 consecutive work days
+- Minimum 11-hour rest between shifts
+- Maximum 44 hours per week
+- Minimum employees per shift
 
-// Example for 24/7 restaurant:
-settings.shiftDefinitions = [
-  { type: 'morning', label: 'Manhã', startTime: '06:00', endTime: '14:00', minEmployees: 2 },
-  { type: 'afternoon', label: 'Tarde', startTime: '14:00', endTime: '22:00', minEmployees: 2 },
-  { type: 'night', label: 'Noite', startTime: '22:00', endTime: '06:00', minEmployees: 1 },
-];
-```
-
-### Implementation Phases
-
-1. **Phase 1:** Add shiftDefinitions to settings, modify schedule generation
-2. **Phase 2:** Employee availability/restrictions input
-3. **Phase 3:** Conflict detection and resolution UI
-4. **Phase 4:** Publish and notify via WhatsApp
-
-### Files to Create/Modify
-
-```
-apps/mobile/src/components/schedule/
-├── DayTimelineView.tsx        # Timeline visual
-├── ShiftBlock.tsx             # Individual shift block
-└── ShiftListItem.tsx          # List item
-
-apps/mobile/app/(tabs)/schedule.tsx  # Main schedule screen
-apps/api/src/types/index.ts          # ShiftDefinition type
-```
+### Key Files
+- `apps/api/src/services/gemini.ts` - AI schedule generation
+- `apps/api/src/services/scheduleValidator.ts` - CLT validation
+- `apps/api/src/routes/schedules.ts` - API endpoints
 
 ---
 
@@ -251,11 +234,13 @@ cd apps/mobile && npx expo start
 # Check API health
 curl http://localhost:3001/health
 
+# Test PIN login endpoint
+curl -X POST http://localhost:3001/employees/pin-login \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "11999999999", "pin": "123456"}'
+
 # Check Expo bundler
 curl http://localhost:8081/status
-
-# Kill all node processes if needed (careful!)
-pkill -f "node.*escala-simples"
 ```
 
 ---
@@ -274,7 +259,7 @@ establishments/
       swapsAllowed: boolean
       swapsRequireApproval: boolean
       maxSwapsPerMonth: number
-      shiftDefinitions?: ShiftDefinition[]  # NEW - for multi-shift support
+      shiftDefinitions?: ShiftDefinition[]
     }
     status: 'pending' | 'active'
     onboardingStep: number | null
@@ -285,6 +270,7 @@ employees/
     establishmentId: string
     name: string
     phone: string (formatted: 5511999999999)
+    pinHash: string (SHA256 hashed PIN for login)
     status: 'pending' | 'active' | 'inactive'
     inviteStatus: 'pending' | 'sent' | 'completed' | 'expired'
     inviteSentAt, inviteToken, inviteExpiresAt, inviteCompletedAt
@@ -295,22 +281,8 @@ employees/
       preferredShifts: string[]
       notes: string
     }
-    # NEW - for employee availability system
-    recurringAvailability?: {
-      [dayOfWeek: number]: {
-        available: boolean
-        startTime?: string
-        endTime?: string
-        blockedShiftTypes?: string[]
-      }
-    }
-    temporaryAvailability?: Array<{
-      id: string
-      startDate: string
-      endDate: string
-      type: 'unavailable' | 'partial'
-      reason?: string
-    }>
+    recurringAvailability?: { [dayOfWeek]: { available, startTime?, endTime? } }
+    temporaryAvailability?: Array<{ id, startDate, endDate, type, reason? }>
     createdAt, updatedAt: Timestamp
 
 invites/
@@ -320,23 +292,16 @@ invites/
     used: boolean
     usedAt?: Timestamp
 
-schedules/  # To be implemented
+schedules/
   {scheduleId}/
     establishmentId: string
-    weekStart: string (YYYY-MM-DD)
-    status: 'draft' | 'published'
+    weekStartDate: string (YYYY-MM-DD)
+    weekEndDate: string
+    status: 'draft' | 'published' | 'archived'
+    generatedBy: 'ai' | 'manual'
     shifts: Shift[]
-    conflicts: Conflict[]
-    createdAt, publishedAt: Timestamp
+    createdAt, updatedAt, publishedAt: Timestamp
 ```
-
-### Required Indexes (firestore.indexes.json)
-
-Key indexes already deployed:
-- `establishments`: ownerId + createdAt (DESC)
-- `employees`: establishmentId + createdAt (DESC)
-- `employees`: establishmentId + status + name
-- `invites`: establishmentId + createdAt (DESC)
 
 ---
 
@@ -355,21 +320,33 @@ Key indexes already deployed:
 
 ### Employees (`/employees`)
 - `GET /` - List employees
-- `POST /` - Add employee
+- `POST /` - Add employee (returns PIN once)
 - `POST /batch` - Add multiple employees
 - `PUT /:id` - Update employee
 - `DELETE /:id` - Remove employee
+- `POST /pin-login` - **Employee PIN login (public)**
+- `POST /:id/regenerate-pin` - Generate new PIN for employee
 
 ### Invites (`/invites`)
-- `POST /send` - Send WhatsApp invite
+- `POST /send` - Send WhatsApp invite (legacy)
+- `POST /create-token` - **Create invite token for native share**
 - `POST /send-bulk` - Bulk send invites
 - `POST /resend/:id` - Resend invite
 - `GET /validate/:token` - Validate token (public)
 - `POST /submit-restrictions` - Submit restrictions (public)
 
-### Employee Auth (`/employee`)
-- `POST /auth/request-otp` - Request OTP via WhatsApp
-- `POST /auth/verify-otp` - Verify OTP and get session
+### Schedules (`/schedules`)
+- `GET /` - List schedules
+- `GET /week/:weekStartDate` - Get schedule for specific week
+- `POST /generate` - **Generate AI schedule**
+- `PUT /:id` - Update schedule
+- `POST /:id/publish` - Publish schedule
+- `DELETE /:id` - Delete schedule
+
+### Employee Schedule (`/employee/schedule`)
+- `GET /` - Get employee's schedules
+- `GET /week/:weekStartDate` - Get employee's week schedule
+- `GET /upcoming` - Get upcoming shifts
 
 ---
 
@@ -379,52 +356,91 @@ Key indexes already deployed:
 |------|---------|
 | `CLAUDE.md` | Project guidelines, design system, API docs |
 | `handover.md` | This file - AI agent onboarding |
-| `.claude/plans/generic-leaping-fiddle.md` | Schedule system implementation plan |
 | `firestore.indexes.json` | Firestore composite indexes |
 | `apps/api/src/index.ts` | Express server entry point |
-| `apps/api/src/services/gemini.ts` | Gemini AI service |
-| `apps/api/src/services/whatsapp.ts` | WhatsApp messaging |
+| `apps/api/src/services/gemini.ts` | Gemini AI service (schedule + settings) |
+| `apps/api/src/services/scheduleValidator.ts` | CLT validation |
+| `apps/api/src/routes/employees.ts` | Employee routes + PIN login |
+| `apps/api/src/routes/schedules.ts` | Schedule routes + AI generation |
 | `apps/mobile/src/services/api.ts` | API client |
+| `apps/mobile/src/services/share.ts` | Native share functionality |
 | `apps/mobile/src/hooks/useEstablishment.tsx` | Establishment state |
-| `apps/mobile/src/hooks/useEmployeeAuth.tsx` | Employee auth hook |
+| `apps/mobile/src/hooks/useEmployeeAuth.tsx` | Employee auth hook (PIN-based) |
+| `apps/mobile/app/(employee)/login.tsx` | PIN login screen |
 | `apps/mobile/FIREBASE_SETUP.md` | Firebase config setup instructions |
-| `apps/mobile/google-services.json.example` | Android Firebase config template |
-| `apps/mobile/GoogleService-Info.plist.example` | iOS Firebase config template |
 
 ---
 
-## 11. Next Steps for New Agent
+## 11. User Flows
 
-### Immediate Priority: Schedule System
+### Manager Inviting Employee
 
-1. **Read the plan:** `.claude/plans/generic-leaping-fiddle.md`
+```
+1. Manager goes to Team tab
+2. Taps employee card → taps paper-plane icon
+3. Native share sheet opens
+4. Manager selects WhatsApp/SMS/Email
+5. Pre-filled message with invite link is ready
+6. Manager taps send
+```
 
-2. **Implement Phase 1:**
-   - Add `ShiftDefinition` type to `apps/api/src/types/index.ts`
-   - Add default shiftDefinitions to establishment settings
-   - Update schedule generation logic in `apps/mobile/app/(tabs)/schedule.tsx`
-   - Create `DayTimelineView.tsx` component
+### Employee Login
 
-3. **Test locally:**
-   - Start API and Expo
-   - Verify schedule shows multiple shifts
-   - Verify timeline renders correctly
+```
+1. Employee opens app → "Sou funcionário"
+2. Enters phone number
+3. Enters 6-digit PIN (received from manager)
+4. Taps "Entrar"
+5. Logged in immediately
+```
 
-### Secondary: Employee Availability
+### Manager Creating Employee
 
-- Implement availability input UI in `(employee)/availability.tsx`
-- Save recurring and temporary availability
-- Integrate with schedule generation
-
-### Future Work
-
-- Conflict detection and resolution
-- Schedule publishing with WhatsApp notifications
-- Shift swap requests
+```
+1. Manager taps "Add Employee" in Team tab
+2. Enters employee name and phone
+3. System generates 6-digit PIN
+4. PIN shown to manager once (to share with employee)
+5. Manager can use share button to send PIN
+```
 
 ---
 
-## 12. Key Reminders
+## 12. Next Steps for New Agent
+
+### Current State
+The MVP is largely complete with:
+- Manager and employee authentication
+- Team management with PIN-based employee onboarding
+- AI-powered schedule generation
+- Settings management via AI chat
+
+### Potential Enhancements
+
+1. **Shift Swap System:**
+   - Employee requests swap
+   - Another employee accepts
+   - Manager approves (optional)
+   - Notifications sent
+
+2. **Schedule Publishing Workflow:**
+   - Manager reviews AI-generated schedule
+   - Makes manual adjustments if needed
+   - Publishes schedule
+   - Employees notified
+
+3. **Employee Availability UI:**
+   - Better recurring availability input
+   - Calendar for temporary exceptions
+   - Integration with schedule generation
+
+4. **QR Code Invitations:**
+   - In-person onboarding
+   - Manager shows QR, employee scans
+
+---
+
+## 13. Key Reminders
 
 - **All UI:** Follow Apple HIG (see CLAUDE.md)
 - **User messages:** Always in Portuguese
@@ -433,15 +449,15 @@ Key indexes already deployed:
 - **Package manager:** npm only (not yarn or pnpm)
 - **Verification:** Always test changes locally before marking complete
 - **TypeScript:** Run `npx tsc --noEmit` before committing
+- **Employee Auth:** PIN-based, not OTP
 
 ---
 
-## 13. Questions? Check:
+## 14. Questions? Check:
 
 1. `CLAUDE.md` - Design guidelines, code patterns, common mistakes
 2. `.taskmaster/docs/prd.txt` - Product requirements
-3. `.claude/plans/` - Implementation plans
-4. This file - Project status and architecture
+3. This file - Project status and architecture
 
 ---
 

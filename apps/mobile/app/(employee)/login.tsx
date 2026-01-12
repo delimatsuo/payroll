@@ -1,9 +1,9 @@
 /**
  * Employee Login Screen
- * Apple-style phone OTP authentication flow
+ * Simple phone + PIN authentication flow
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,32 +18,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  FadeInDown,
-  FadeOutUp,
-  SlideInRight,
-  SlideOutLeft,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { colors, spacing, fontSize, borderRadius } from '../../src/theme';
 import { useEmployeeAuth } from '../../src/hooks';
 
 export default function EmployeeLoginScreen() {
   const router = useRouter();
-  const { otpStep, isLoading, error, requestOtp, verifyOtp, resendOtp, resetFlow } = useEmployeeAuth();
+  const { isLoading, error, loginWithPin } = useEmployeeAuth();
 
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [countdown, setCountdown] = useState(0);
-
-  const otpInputRefs = useRef<Array<TextInput | null>>([]);
-
-  // Countdown timer for resend
-  useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [countdown]);
+  const [pin, setPin] = useState(['', '', '', '', '', '']);
+  const pinInputRefs = useRef<Array<TextInput | null>>([]);
 
   // Format phone number as user types
   const formatPhoneDisplay = (value: string): string => {
@@ -58,92 +43,58 @@ export default function EmployeeLoginScreen() {
     setPhone(numbers.slice(0, 11));
   };
 
-  const handleSendOtp = async () => {
-    if (phone.length < 10) return;
-
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const result = await requestOtp(phone);
-
-    if (result.success) {
-      setCountdown(60);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  };
-
-  const handleOtpChange = (index: number, value: string) => {
+  const handlePinChange = (index: number, value: string) => {
     if (value.length > 1) {
       // Handle paste
       const digits = value.replace(/\D/g, '').slice(0, 6);
-      const newOtp = [...otp];
+      const newPin = [...pin];
       digits.split('').forEach((d, i) => {
-        if (i + index < 6) newOtp[i + index] = d;
+        if (i + index < 6) newPin[i + index] = d;
       });
-      setOtp(newOtp);
+      setPin(newPin);
 
       // Focus last filled or next empty
       const lastIndex = Math.min(index + digits.length, 5);
-      otpInputRefs.current[lastIndex]?.focus();
+      pinInputRefs.current[lastIndex]?.focus();
       return;
     }
 
-    const newOtp = [...otp];
-    newOtp[index] = value.replace(/\D/g, '');
-    setOtp(newOtp);
+    const newPin = [...pin];
+    newPin[index] = value.replace(/\D/g, '');
+    setPin(newPin);
 
     // Auto-advance
     if (value && index < 5) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when complete
-    if (index === 5 && value) {
-      const fullOtp = newOtp.join('');
-      if (fullOtp.length === 6) {
-        handleVerifyOtp(fullOtp);
-      }
+      pinInputRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleOtpKeyPress = (index: number, key: string) => {
-    if (key === 'Backspace' && !otp[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
+  const handlePinKeyPress = (index: number, key: string) => {
+    if (key === 'Backspace' && !pin[index] && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
     }
   };
 
-  const handleVerifyOtp = async (code: string) => {
+  const handleLogin = async () => {
+    if (phone.length < 10 || !isPinComplete) return;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const result = await verifyOtp(phone, code);
+    const result = await loginWithPin(phone, pin.join(''));
 
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(employee)/home' as Href);
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setOtp(['', '', '', '', '', '']);
-      otpInputRefs.current[0]?.focus();
+      // Clear PIN on error
+      setPin(['', '', '', '', '', '']);
+      pinInputRefs.current[0]?.focus();
     }
-  };
-
-  const handleResend = async () => {
-    if (countdown > 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const result = await resendOtp();
-    if (result.success) {
-      setCountdown(60);
-      setOtp(['', '', '', '', '', '']);
-    }
-  };
-
-  const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    resetFlow();
-    setOtp(['', '', '', '', '', '']);
   };
 
   const isPhoneValid = phone.length >= 10;
-  const isOtpComplete = otp.every(d => d !== '');
+  const isPinComplete = pin.every(d => d !== '');
+  const canSubmit = isPhoneValid && isPinComplete;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -153,141 +104,99 @@ export default function EmployeeLoginScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          {otpStep === 'otp' && (
-            <Pressable onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="chevron-back" size={28} color={colors.text.link} />
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.back();
+            }}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={28} color={colors.text.link} />
+          </Pressable>
         </View>
 
         {/* Content */}
         <View style={styles.content}>
-          {otpStep === 'phone' ? (
-            <Animated.View
-              entering={FadeInDown.duration(300)}
-              exiting={SlideOutLeft.duration(200)}
-              style={styles.stepContainer}
-            >
-              <View style={styles.iconContainer}>
-                <Ionicons name="phone-portrait-outline" size={48} color={colors.primary[600]} />
-              </View>
+          <Animated.View
+            entering={FadeInDown.duration(300)}
+            style={styles.formContainer}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="lock-closed-outline" size={48} color={colors.primary[600]} />
+            </View>
 
-              <Text style={styles.title}>Entrar com celular</Text>
-              <Text style={styles.subtitle}>
-                Digite seu número para receber um código de verificação pelo WhatsApp
-              </Text>
+            <Text style={styles.title}>Entrar como funcionário</Text>
+            <Text style={styles.subtitle}>
+              Use seu número de celular e o PIN fornecido pelo seu gerente
+            </Text>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.countryCode}>+55</Text>
+            {/* Phone Input */}
+            <Text style={styles.inputLabel}>Celular</Text>
+            <View style={styles.inputContainer}>
+              <Text style={styles.countryCode}>+55</Text>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="(00) 00000-0000"
+                placeholderTextColor={colors.text.quaternary}
+                keyboardType="phone-pad"
+                value={formatPhoneDisplay(phone)}
+                onChangeText={handlePhoneChange}
+                autoFocus
+                maxLength={16}
+              />
+            </View>
+
+            {/* PIN Input */}
+            <Text style={styles.inputLabel}>PIN de acesso</Text>
+            <View style={styles.pinContainer}>
+              {pin.map((digit, index) => (
                 <TextInput
-                  style={styles.phoneInput}
-                  placeholder="(00) 00000-0000"
-                  placeholderTextColor={colors.text.quaternary}
-                  keyboardType="phone-pad"
-                  value={formatPhoneDisplay(phone)}
-                  onChangeText={handlePhoneChange}
-                  autoFocus
-                  maxLength={16}
+                  key={index}
+                  ref={(el) => { pinInputRefs.current[index] = el; }}
+                  style={[
+                    styles.pinInput,
+                    digit && styles.pinInputFilled,
+                  ]}
+                  value={digit}
+                  onChangeText={(value) => handlePinChange(index, value)}
+                  onKeyPress={({ nativeEvent }) => handlePinKeyPress(index, nativeEvent.key)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  selectTextOnFocus
+                  secureTextEntry
                 />
-              </View>
+              ))}
+            </View>
 
-              {error && (
-                <Animated.Text entering={FadeInDown} style={styles.errorText}>
-                  {error}
-                </Animated.Text>
-              )}
+            {error && (
+              <Animated.Text entering={FadeInDown} style={styles.errorText}>
+                {error}
+              </Animated.Text>
+            )}
 
-              <Pressable
-                onPress={handleSendOtp}
-                disabled={!isPhoneValid || isLoading}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  (!isPhoneValid || isLoading) && styles.primaryButtonDisabled,
-                  pressed && styles.primaryButtonPressed,
-                ]}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.text.inverse} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Enviar código</Text>
-                )}
-              </Pressable>
-            </Animated.View>
-          ) : (
-            <Animated.View
-              entering={SlideInRight.duration(300)}
-              exiting={FadeOutUp.duration(200)}
-              style={styles.stepContainer}
+            <Pressable
+              onPress={handleLogin}
+              disabled={!canSubmit || isLoading}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                (!canSubmit || isLoading) && styles.primaryButtonDisabled,
+                pressed && styles.primaryButtonPressed,
+              ]}
             >
-              <View style={styles.iconContainer}>
-                <Ionicons name="keypad-outline" size={48} color={colors.primary[600]} />
-              </View>
-
-              <Text style={styles.title}>Digite o código</Text>
-              <Text style={styles.subtitle}>
-                Enviamos um código de 6 dígitos para{'\n'}
-                <Text style={styles.phoneHighlight}>{formatPhoneDisplay(phone)}</Text>
-              </Text>
-
-              {/* OTP Input */}
-              <View style={styles.otpContainer}>
-                {otp.map((digit, index) => (
-                  <TextInput
-                    key={index}
-                    ref={(el) => { otpInputRefs.current[index] = el; }}
-                    style={[
-                      styles.otpInput,
-                      digit && styles.otpInputFilled,
-                    ]}
-                    value={digit}
-                    onChangeText={(value) => handleOtpChange(index, value)}
-                    onKeyPress={({ nativeEvent }) => handleOtpKeyPress(index, nativeEvent.key)}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    selectTextOnFocus
-                    autoFocus={index === 0}
-                  />
-                ))}
-              </View>
-
-              {error && (
-                <Animated.Text entering={FadeInDown} style={styles.errorText}>
-                  {error}
-                </Animated.Text>
+              {isLoading ? (
+                <ActivityIndicator color={colors.text.inverse} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Entrar</Text>
               )}
+            </Pressable>
 
-              <Pressable
-                onPress={() => handleVerifyOtp(otp.join(''))}
-                disabled={!isOtpComplete || isLoading}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  (!isOtpComplete || isLoading) && styles.primaryButtonDisabled,
-                  pressed && styles.primaryButtonPressed,
-                ]}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.text.inverse} />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Verificar</Text>
-                )}
-              </Pressable>
-
-              <Pressable
-                onPress={handleResend}
-                disabled={countdown > 0}
-                style={styles.resendButton}
-              >
-                <Text style={[
-                  styles.resendText,
-                  countdown > 0 && styles.resendTextDisabled,
-                ]}>
-                  {countdown > 0
-                    ? `Reenviar código em ${countdown}s`
-                    : 'Reenviar código'}
-                </Text>
-              </Pressable>
-            </Animated.View>
-          )}
+            <Text style={styles.helpText}>
+              Não tem um PIN?{' '}
+              <Text style={styles.helpLink}>
+                Solicite ao seu gerente
+              </Text>
+            </Text>
+          </Animated.View>
         </View>
 
         {/* Footer */}
@@ -327,7 +236,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     justifyContent: 'center',
   },
-  stepContainer: {
+  formContainer: {
     alignItems: 'center',
   },
   iconContainer: {
@@ -353,9 +262,14 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: spacing.xl,
   },
-  phoneHighlight: {
+  inputLabel: {
+    alignSelf: 'flex-start',
+    fontSize: fontSize.footnote,
     fontWeight: '600',
-    color: colors.text.primary,
+    color: colors.text.secondary,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -380,12 +294,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     letterSpacing: 1,
   },
-  otpContainer: {
+  pinContainer: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.lg,
+    width: '100%',
+    justifyContent: 'center',
   },
-  otpInput: {
+  pinInput: {
     width: 48,
     height: 56,
     borderRadius: borderRadius.md,
@@ -395,7 +311,7 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     textAlign: 'center',
   },
-  otpInputFilled: {
+  pinInputFilled: {
     backgroundColor: colors.primary[50],
     borderWidth: 2,
     borderColor: colors.primary[600],
@@ -426,17 +342,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.inverse,
   },
-  resendButton: {
+  helpText: {
     marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
+    fontSize: fontSize.footnote,
+    color: colors.text.tertiary,
+    textAlign: 'center',
   },
-  resendText: {
-    fontSize: fontSize.body,
+  helpLink: {
     color: colors.text.link,
     fontWeight: '500',
-  },
-  resendTextDisabled: {
-    color: colors.text.tertiary,
   },
   footer: {
     paddingHorizontal: spacing.lg,

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { collections } from '../services/firebase';
 import { requireAuth, loadEstablishment, requireEstablishment } from '../middleware/auth';
 import { geminiService } from '../services/gemini';
+import { scheduleValidator } from '../services/scheduleValidator';
+import { sendScheduleNotification } from '../services/whatsapp';
 import {
   GenerateScheduleSchema,
   UpdateShiftSchema,
@@ -251,6 +253,22 @@ router.post('/generate', async (req: Request, res: Response) => {
       status: 'scheduled' as const,
     }));
 
+    // Validate the generated schedule against CLT rules
+    const validation = scheduleValidator.validateSchedule(
+      shifts,
+      establishment.operatingHours,
+      establishment.settings?.minEmployeesPerShift || 2
+    );
+
+    // Combine warnings from generation and validation
+    const allWarnings = [
+      ...result.warnings,
+      ...validation.warnings.map((w) => w.message),
+    ];
+
+    // If there are validation errors, still save as draft but include errors
+    const validationErrors = validation.errors.map((e) => e.message);
+
     // Save schedule
     const schedule: Omit<Schedule, 'id'> = {
       establishmentId: req.establishmentId!,
@@ -271,11 +289,16 @@ router.post('/generate', async (req: Request, res: Response) => {
 
     console.log('[POST /schedules/generate] Schedule created:', docRef.id);
     console.log('[POST /schedules/generate] Shifts:', shifts.length);
+    console.log('[POST /schedules/generate] Validation:', { isValid: validation.isValid, errors: validationErrors.length, warnings: allWarnings.length });
 
     res.status(201).json({
       id: docRef.id,
       ...schedule,
-      warnings: result.warnings,
+      validation: {
+        isValid: validation.isValid,
+        errors: validationErrors,
+        warnings: allWarnings,
+      },
     });
   } catch (error) {
     console.error('Error generating schedule:', error);
@@ -449,9 +472,62 @@ router.post('/:id/publish', async (req: Request, res: Response) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // TODO: Send WhatsApp notifications to employees
+    // Send WhatsApp notifications to employees
+    const shifts: Shift[] = data?.shifts || [];
+    const establishment = req.establishment;
+    const establishmentName = establishment?.name || 'Estabelecimento';
 
-    res.json({ success: true, message: 'Escala publicada com sucesso' });
+    // Group shifts by employee
+    const shiftsByEmployee = new Map<string, Shift[]>();
+    for (const shift of shifts) {
+      if (!shiftsByEmployee.has(shift.employeeId)) {
+        shiftsByEmployee.set(shift.employeeId, []);
+      }
+      shiftsByEmployee.get(shift.employeeId)!.push(shift);
+    }
+
+    // Send notifications (don't block the response)
+    const notificationPromises: Promise<void>[] = [];
+    for (const [employeeId, employeeShifts] of shiftsByEmployee) {
+      // Get employee phone
+      const empDoc = await collections.employees.doc(employeeId).get();
+      if (!empDoc.exists) continue;
+
+      const phone = empDoc.data()?.phone;
+      if (!phone) continue;
+
+      // Format notification
+      const weekStart = data?.weekStartDate;
+      const weekEnd = data?.weekEndDate;
+
+      notificationPromises.push(
+        sendScheduleNotification(
+          phone,
+          establishmentName,
+          weekStart,
+          weekEnd,
+          employeeShifts.map((s) => ({
+            date: s.date,
+            dayOfWeek: s.dayOfWeek,
+            startTime: s.startTime,
+            endTime: s.endTime,
+          }))
+        ).catch((err) => {
+          console.error(`Failed to notify employee ${employeeId}:`, err);
+        })
+      );
+    }
+
+    // Don't await all notifications - let them run in background
+    Promise.all(notificationPromises).then(() => {
+      console.log(`[PUBLISH] Sent ${notificationPromises.length} notifications`);
+    });
+
+    res.json({
+      success: true,
+      message: 'Escala publicada com sucesso',
+      notificationsSent: shiftsByEmployee.size,
+    });
   } catch (error) {
     console.error('Error publishing schedule:', error);
     res.status(500).json({

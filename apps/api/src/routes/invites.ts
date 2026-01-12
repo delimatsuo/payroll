@@ -121,6 +121,77 @@ router.post('/send', requireAuth, requireEstablishment, async (req: Request, res
 });
 
 /**
+ * POST /invites/create-token
+ * Create an invite token without sending via WhatsApp
+ * For use with native share functionality
+ * Requires authentication and establishment
+ */
+router.post('/create-token', requireAuth, requireEstablishment, async (req: Request, res: Response) => {
+  try {
+    const body = SendInviteSchema.parse(req.body);
+    const establishmentId = req.establishment!.id;
+
+    // Get employee
+    const employeeDoc = await collections.employees.doc(body.employeeId).get();
+
+    if (!employeeDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Funcionário não encontrado' });
+    }
+
+    const employee = employeeDoc.data()!;
+
+    // Verify employee belongs to this establishment
+    if (employee.establishmentId !== establishmentId) {
+      return res.status(403).json({ success: false, error: 'Funcionário não pertence a este estabelecimento' });
+    }
+
+    // Check if employee already completed onboarding
+    if (employee.inviteStatus === 'completed' || employee.status === 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'Este funcionário já completou o cadastro.',
+      });
+    }
+
+    // Check for existing valid invite
+    if (employee.inviteToken && employee.inviteExpiresAt) {
+      const expiresAt = employee.inviteExpiresAt.toDate ? employee.inviteExpiresAt.toDate() : new Date(employee.inviteExpiresAt);
+      if (expiresAt > new Date()) {
+        // Return existing valid token
+        return res.json({
+          success: true,
+          token: employee.inviteToken,
+          expiresAt: expiresAt.toISOString(),
+          message: 'Usando convite existente',
+        });
+      }
+    }
+
+    // Create new invite token
+    const { token, expiresAt } = await createInvite(body.employeeId, establishmentId);
+
+    // Update employee with invite info (but don't change status to 'sent' since we're not sending)
+    await collections.employees.doc(body.employeeId).update({
+      inviteToken: token,
+      inviteExpiresAt: expiresAt,
+    });
+
+    return res.json({
+      success: true,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      message: 'Token criado com sucesso',
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: 'Dados inválidos', details: error.errors });
+    }
+    console.error('Create invite token error:', error);
+    return res.status(500).json({ success: false, error: 'Erro interno do servidor' });
+  }
+});
+
+/**
  * POST /invites/send-bulk
  * Send invites to multiple employees
  * Requires authentication and establishment

@@ -10,6 +10,7 @@ import chatRoutes from './routes/chat';
 import schedulesRoutes from './routes/schedules';
 import employeeAuthRoutes from './routes/employee-auth';
 import employeeAvailabilityRoutes from './routes/employee-availability';
+import employeeScheduleRoutes from './routes/employee-schedule';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -85,6 +86,7 @@ app.use('/chat', chatRoutes);
 app.use('/schedules', schedulesRoutes);
 app.use('/employee-auth', employeeAuthRoutes);
 app.use('/availability', employeeAvailabilityRoutes);
+app.use('/employee/schedule', employeeScheduleRoutes);
 
 // 404 handler
 app.use((req, res) => {

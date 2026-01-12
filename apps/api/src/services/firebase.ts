@@ -18,6 +18,7 @@ if (!admin.apps.length) {
 }
 
 export const auth = admin.auth();
+export const adminAuth = auth; // Alias for admin auth operations
 export const db = admin.firestore();
 
 // Collection references

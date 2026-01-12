@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { collections } from '../services/firebase';
+import { createHash } from 'crypto';
+import { collections, adminAuth } from '../services/firebase';
 import { requireAuth, loadEstablishment, requireEstablishment } from '../middleware/auth';
 import {
   CreateEmployeeSchema,
@@ -9,9 +10,122 @@ import {
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 
+// Generate a random 6-digit PIN
+function generatePIN(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Hash PIN for secure storage
+function hashPIN(pin: string): string {
+  return createHash('sha256').update(pin).digest('hex');
+}
+
+// Verify PIN against hash
+function verifyPIN(pin: string, hash: string): boolean {
+  return hashPIN(pin) === hash;
+}
+
 const router = Router();
 
-// All routes require authentication and establishment
+// ==========================================================================
+// PUBLIC ENDPOINTS (No authentication required)
+// ==========================================================================
+
+const PinLoginSchema = z.object({
+  phone: z.string().min(10).max(15),
+  pin: z.string().length(6),
+});
+
+/**
+ * POST /employees/pin-login
+ * Authenticate employee using phone + PIN
+ * Returns Firebase custom token for app login
+ * PUBLIC endpoint - no auth required
+ */
+router.post('/pin-login', async (req: Request, res: Response) => {
+  try {
+    const parsed = PinLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        message: 'Verifique o telefone e PIN',
+      });
+    }
+
+    const { phone, pin } = parsed.data;
+    const normalizedPhone = phone.replace(/\D/g, '');
+
+    // Find employee by phone
+    const snapshot = await collections.employees
+      .where('phone', '==', normalizedPhone)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(401).json({
+        success: false,
+        error: 'Credenciais inválidas',
+        message: 'Telefone ou PIN incorreto',
+      });
+    }
+
+    const employeeDoc = snapshot.docs[0];
+    const employee = employeeDoc.data();
+
+    // Check if PIN hash exists
+    if (!employee.pinHash) {
+      return res.status(401).json({
+        success: false,
+        error: 'PIN não configurado',
+        message: 'Solicite um novo PIN ao seu gerente',
+      });
+    }
+
+    // Verify PIN
+    if (!verifyPIN(pin, employee.pinHash)) {
+      return res.status(401).json({
+        success: false,
+        error: 'Credenciais inválidas',
+        message: 'Telefone ou PIN incorreto',
+      });
+    }
+
+    // Generate Firebase custom token for employee
+    const uid = `employee_${employeeDoc.id}`;
+    const customToken = await adminAuth.createCustomToken(uid, {
+      role: 'employee',
+      employeeId: employeeDoc.id,
+      establishmentId: employee.establishmentId,
+      phone: normalizedPhone,
+    });
+
+    return res.json({
+      success: true,
+      token: customToken,
+      employee: {
+        id: employeeDoc.id,
+        name: employee.name,
+        phone: employee.phone,
+        establishmentId: employee.establishmentId,
+        status: employee.status,
+      },
+    });
+  } catch (error) {
+    console.error('PIN login error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno',
+      message: 'Erro ao fazer login',
+    });
+  }
+});
+
+// ==========================================================================
+// PROTECTED ENDPOINTS (Require authentication and establishment)
+// ==========================================================================
+
+// Apply middleware only to routes defined after this point
 router.use(requireAuth);
 router.use(loadEstablishment);
 router.use(requireEstablishment);
@@ -128,6 +242,10 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    // Generate PIN for employee login
+    const pin = generatePIN();
+    const pinHash = hashPIN(pin);
+
     const employee: Omit<Employee, 'id'> = {
       establishmentId: req.establishmentId!,
       name,
@@ -139,13 +257,16 @@ router.post('/', async (req: Request, res: Response) => {
 
     const docRef = await collections.employees.add({
       ...employee,
+      pinHash, // Store hashed PIN
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    // Return PIN in response (only time it's shown in plain text)
     res.status(201).json({
       id: docRef.id,
       ...employee,
+      pin, // Return plain PIN so manager can share it
     });
   } catch (error) {
     console.error('Error creating employee:', error);
@@ -361,6 +482,56 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.status(500).json({
       error: 'Erro interno',
       message: 'Erro ao remover funcionário',
+    });
+  }
+});
+
+/**
+ * POST /employees/:id/regenerate-pin
+ * Generate a new PIN for an employee
+ * Requires manager authentication
+ */
+router.post('/:id/regenerate-pin', requireAuth, loadEstablishment, requireEstablishment, async (req: Request, res: Response) => {
+  try {
+    const doc = await collections.employees.doc(req.params.id).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: 'Não encontrado',
+        message: 'Funcionário não encontrado',
+      });
+    }
+
+    // Verify ownership
+    if (doc.data()?.establishmentId !== req.establishmentId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Acesso negado',
+        message: 'Este funcionário não pertence ao seu estabelecimento',
+      });
+    }
+
+    // Generate new PIN
+    const pin = generatePIN();
+    const pinHash = hashPIN(pin);
+
+    await collections.employees.doc(req.params.id).update({
+      pinHash,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.json({
+      success: true,
+      pin, // Return new PIN so manager can share it
+      message: 'Novo PIN gerado com sucesso',
+    });
+  } catch (error) {
+    console.error('Regenerate PIN error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno',
+      message: 'Erro ao gerar novo PIN',
     });
   }
 });

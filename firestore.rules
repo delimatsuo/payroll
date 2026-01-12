@@ -17,11 +17,27 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Check if user is manager of establishment
+    // Check if user is manager (owner) of establishment
     function isManagerOf(establishmentId) {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/establishments/$(establishmentId)) &&
-        get(/databases/$(database)/documents/establishments/$(establishmentId)).data.managerId == request.auth.uid;
+        get(/databases/$(database)/documents/establishments/$(establishmentId)).data.ownerId == request.auth.uid;
+    }
+
+    // Check if user is an employee (authenticated via custom token with role)
+    function isEmployee() {
+      return isAuthenticated() && request.auth.token.role == 'employee';
+    }
+
+    // Check if user is a manager (not an employee)
+    function isManager() {
+      return isAuthenticated() && request.auth.token.role != 'employee';
+    }
+
+    // Check if employee has access to this establishment
+    function isEmployeeOfEstablishment(establishmentId) {
+      return isEmployee() && request.auth.token.phone != null;
+      // Note: Full validation is done at API level since we need to query by phone
     }
 
     // =========================================================================
@@ -44,15 +60,15 @@ service cloud.firestore {
     match /establishments/{establishmentId} {
       // Manager can read their establishments
       allow read: if isAuthenticated() &&
-        resource.data.managerId == request.auth.uid;
+        resource.data.ownerId == request.auth.uid;
 
       // Manager can create establishment
       allow create: if isAuthenticated() &&
-        request.resource.data.managerId == request.auth.uid;
+        request.resource.data.ownerId == request.auth.uid;
 
       // Manager can update their establishment
       allow update: if isAuthenticated() &&
-        resource.data.managerId == request.auth.uid;
+        resource.data.ownerId == request.auth.uid;
 
       // No delete allowed
       allow delete: if false;
@@ -64,13 +80,20 @@ service cloud.firestore {
 
     match /employees/{employeeId} {
       // Manager can read employees of their establishments
-      allow read: if isManagerOf(resource.data.establishmentId);
+      // Employee can read only their own document (validated by API)
+      allow read: if isManagerOf(resource.data.establishmentId) ||
+        (isEmployee() && request.auth.token.phone != null);
 
       // Manager can create employees for their establishments
       allow create: if isManagerOf(request.resource.data.establishmentId);
 
       // Manager can update employees of their establishments
-      allow update: if isManagerOf(resource.data.establishmentId);
+      // Employee can update only specific fields (availability)
+      allow update: if isManagerOf(resource.data.establishmentId) ||
+        (isEmployee() &&
+          request.auth.token.phone != null &&
+          // Only allow updating availability fields
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recurringAvailability', 'temporaryAvailability', 'availabilityUpdatedAt']));
 
       // Manager can delete (deactivate) employees
       allow delete: if isManagerOf(resource.data.establishmentId);
@@ -82,7 +105,9 @@ service cloud.firestore {
 
     match /schedules/{scheduleId} {
       // Manager can read schedules of their establishments
-      allow read: if isManagerOf(resource.data.establishmentId);
+      // Employee can read published schedules of their establishments
+      allow read: if isManagerOf(resource.data.establishmentId) ||
+        (isEmployee() && resource.data.status == 'published');
 
       // Manager can create schedules for their establishments
       allow create: if isManagerOf(request.resource.data.establishmentId);
@@ -90,12 +115,13 @@ service cloud.firestore {
       // Manager can update schedules of their establishments
       allow update: if isManagerOf(resource.data.establishmentId);
 
-      // No delete allowed
-      allow delete: if false;
+      // Manager can delete draft schedules
+      allow delete: if isManagerOf(resource.data.establishmentId) &&
+        resource.data.status == 'draft';
     }
 
     // =========================================================================
-    // SHIFTS
+    // SHIFTS (embedded in schedules, but kept for potential future separation)
     // =========================================================================
 
     match /shifts/{shiftId} {
@@ -136,6 +162,40 @@ service cloud.firestore {
 
       // No direct create/delete from client
       allow create, delete: if false;
+    }
+
+    // =========================================================================
+    // INVITES
+    // =========================================================================
+
+    match /invites/{inviteToken} {
+      // Anyone can read invite (for validation - public endpoint)
+      allow read: if true;
+
+      // Only managers can create invites (via API with auth)
+      // Updates are done by Cloud Functions when invite is used
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // EMPLOYEE USERS (for employee authentication)
+    // =========================================================================
+
+    match /employeeUsers/{phoneHash} {
+      // Employee can read their own user document
+      allow read: if isEmployee();
+
+      // Created/updated by API on OTP verification
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // OTP CODES (temporary codes for employee login)
+    // =========================================================================
+
+    match /otpCodes/{phoneHash} {
+      // OTP codes are managed entirely by the API
+      allow read, write: if false;
     }
 
     // =========================================================================

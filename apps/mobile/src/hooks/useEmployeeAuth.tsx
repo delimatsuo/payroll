@@ -1,6 +1,6 @@
 /**
  * Employee Authentication Hook
- * Handles phone-based OTP authentication for employees
+ * Handles phone + PIN authentication for employees
  */
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -11,18 +11,22 @@ import { authService } from '../services/firebase';
 const EMPLOYEE_USER_KEY = '@escala_simples:employee_user';
 const ACTIVE_EMPLOYEE_LINK_KEY = '@escala_simples:active_employee_link';
 
-type OtpStep = 'phone' | 'otp' | 'authenticated';
+type AuthStep = 'login' | 'authenticated';
 
 interface EmployeeAuthContextType {
   // State
   isAuthenticated: boolean;
   isLoading: boolean;
-  otpStep: OtpStep;
+  authStep: AuthStep;
   user: EmployeeUser | null;
   activeLink: EmployeeEstablishmentLink | null;
   error: string | null;
 
-  // OTP Flow
+  // PIN Login
+  loginWithPin: (phone: string, pin: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Legacy OTP Flow (deprecated)
+  otpStep: 'phone' | 'otp' | 'authenticated';
   requestOtp: (phone: string) => Promise<{ success: boolean; error?: string }>;
   verifyOtp: (phone: string, otp: string) => Promise<{ success: boolean; error?: string }>;
   resendOtp: () => Promise<{ success: boolean; error?: string }>;
@@ -39,13 +43,16 @@ const EmployeeAuthContext = createContext<EmployeeAuthContextType | undefined>(u
 
 export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
-  const [otpStep, setOtpStep] = useState<OtpStep>('phone');
+  const [authStep, setAuthStep] = useState<AuthStep>('login');
   const [user, setUser] = useState<EmployeeUser | null>(null);
   const [activeLink, setActiveLink] = useState<EmployeeEstablishmentLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingPhone, setPendingPhone] = useState<string | null>(null);
 
-  const isAuthenticated = !!user && otpStep === 'authenticated';
+  const isAuthenticated = !!user && authStep === 'authenticated';
+
+  // Legacy OTP step mapping for backwards compatibility
+  const otpStep = authStep === 'authenticated' ? 'authenticated' : 'phone';
 
   // Load persisted user on mount
   useEffect(() => {
@@ -59,7 +66,7 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser) as EmployeeUser;
           setUser(parsedUser);
-          setOtpStep('authenticated');
+          setAuthStep('authenticated');
 
           if (storedLink) {
             setActiveLink(JSON.parse(storedLink));
@@ -77,7 +84,58 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
     loadPersistedUser();
   }, []);
 
-  // Request OTP
+  // PIN Login
+  const loginWithPin = useCallback(async (phone: string, pin: string) => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const result = await api.pinLogin(phone, pin);
+
+      if (result.success && result.token && result.employee) {
+        // Sign in with Firebase custom token
+        await authService.signInWithCustomToken(result.token);
+
+        // Create user object from employee data
+        const employeeUser: EmployeeUser = {
+          id: result.employee.id,
+          phone: result.employee.phone,
+          name: result.employee.name,
+          establishmentLinks: [{
+            establishmentId: result.employee.establishmentId,
+            employeeId: result.employee.id,
+            establishmentName: '', // Will be populated later if needed
+          }],
+        };
+
+        // Store user
+        setUser(employeeUser);
+        setAuthStep('authenticated');
+
+        // Set active link
+        const defaultLink = employeeUser.establishmentLinks[0];
+        setActiveLink(defaultLink);
+        await AsyncStorage.setItem(ACTIVE_EMPLOYEE_LINK_KEY, JSON.stringify(defaultLink));
+
+        // Persist user
+        await AsyncStorage.setItem(EMPLOYEE_USER_KEY, JSON.stringify(employeeUser));
+
+        return { success: true };
+      }
+
+      const errorMsg = result.message || 'Telefone ou PIN incorreto';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } catch (err) {
+      const errorMsg = 'Erro ao fazer login. Tente novamente.';
+      setError(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Request OTP (deprecated - use loginWithPin instead)
   const requestOtp = useCallback(async (phone: string) => {
     setError(null);
     setIsLoading(true);
@@ -87,7 +145,7 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
 
       if (result.success) {
         setPendingPhone(phone);
-        setOtpStep('otp');
+        // Legacy: Just store the phone, actual auth happens in verifyOtp
         return { success: true };
       }
 
@@ -103,7 +161,7 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Verify OTP
+  // Verify OTP (deprecated - use loginWithPin instead)
   const verifyOtp = useCallback(async (phone: string, otp: string) => {
     setError(null);
     setIsLoading(true);
@@ -117,7 +175,7 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
 
         // Store user
         setUser(result.user);
-        setOtpStep('authenticated');
+        setAuthStep('authenticated');
 
         // Set default active link
         if (result.user.establishmentLinks.length > 0) {
@@ -166,7 +224,7 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.multiRemove([EMPLOYEE_USER_KEY, ACTIVE_EMPLOYEE_LINK_KEY]);
       setUser(null);
       setActiveLink(null);
-      setOtpStep('phone');
+      setAuthStep('login');
       setPendingPhone(null);
     } catch (err) {
       console.error('Error during logout:', err);
@@ -175,9 +233,9 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Reset flow (go back to phone step)
+  // Reset flow (go back to login step)
   const resetFlow = useCallback(() => {
-    setOtpStep('phone');
+    setAuthStep('login');
     setError(null);
     setPendingPhone(null);
   }, []);
@@ -187,10 +245,12 @@ export function EmployeeAuthProvider({ children }: { children: ReactNode }) {
       value={{
         isAuthenticated,
         isLoading,
+        authStep,
         otpStep,
         user,
         activeLink,
         error,
+        loginWithPin,
         requestOtp,
         verifyOtp,
         resendOtp,

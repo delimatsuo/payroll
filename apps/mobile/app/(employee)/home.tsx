@@ -80,12 +80,26 @@ export default function EmployeeHomeScreen() {
         });
       }
 
-      // TODO: Fetch actual shifts from API when endpoint is ready
-      // For now, generate mock shifts based on a typical schedule
-      const mockShifts = generateMockShifts();
-      setShifts(mockShifts);
+      // Fetch actual shifts from API
+      const scheduleResult = await api.getEmployeeUpcomingShifts(14);
+      if (scheduleResult.success !== false && scheduleResult.shifts) {
+        const mappedShifts: EmployeeShift[] = scheduleResult.shifts.map((shift) => ({
+          id: shift.id,
+          date: shift.date,
+          startTime: shift.startTime,
+          endTime: shift.endTime,
+          shiftType: (shift.shiftType as ShiftType) || 'custom',
+          shiftLabel: shift.shiftLabel || getShiftLabel(shift.startTime),
+        }));
+        setShifts(mappedShifts);
+      } else {
+        // No shifts found - show empty state
+        setShifts([]);
+      }
     } catch (err) {
       console.error('Error fetching employee data:', err);
+      // Fall back to empty state on error
+      setShifts([]);
     } finally {
       setLoading(false);
     }
@@ -526,42 +540,13 @@ export default function EmployeeHomeScreen() {
   }
 }
 
-// Helper functions
-function generateMockShifts(): EmployeeShift[] {
-  const shifts: EmployeeShift[] = [];
-  const today = new Date();
-
-  // Generate shifts for the next 14 days
-  for (let i = 0; i < 14; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
-    const dayOfWeek = date.getDay();
-
-    // Skip some days (simulate a real schedule)
-    if (dayOfWeek === 0) continue; // Sunday off
-    if (Math.random() > 0.7) continue; // Random day off
-
-    // Alternate between shift types
-    const shiftTypes: Array<{ type: ShiftType; label: string; start: string; end: string }> = [
-      { type: 'morning', label: 'Manhã', start: '06:00', end: '14:00' },
-      { type: 'afternoon', label: 'Tarde', start: '14:00', end: '22:00' },
-      { type: 'night', label: 'Noite', start: '22:00', end: '06:00' },
-    ];
-
-    const shiftIndex = (i + dayOfWeek) % 3;
-    const shift = shiftTypes[shiftIndex];
-
-    shifts.push({
-      id: `shift-${i}`,
-      date: date.toISOString().split('T')[0],
-      startTime: shift.start,
-      endTime: shift.end,
-      shiftType: shift.type,
-      shiftLabel: shift.label,
-    });
-  }
-
-  return shifts;
+// Helper function to determine shift label from start time
+function getShiftLabel(startTime: string): string {
+  const hour = parseInt(startTime.split(':')[0], 10);
+  if (hour >= 5 && hour < 12) return 'Manhã';
+  if (hour >= 12 && hour < 18) return 'Tarde';
+  if (hour >= 18 && hour < 22) return 'Noite';
+  return 'Madrugada';
 }
 
 function formatShiftDate(date: Date): string {

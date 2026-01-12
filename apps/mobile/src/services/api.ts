@@ -94,6 +94,11 @@ class ApiService {
         return data;
       }
 
+      // If data is an array, return it directly (don't wrap/spread)
+      if (Array.isArray(data)) {
+        return data as unknown as ApiResponse<T> & T;
+      }
+
       return {
         success: true,
         ...data,
@@ -269,6 +274,22 @@ class ApiService {
     });
   }
 
+  /**
+   * Create invite token for an employee (for native share)
+   * Returns the token that can be used in the invite URL
+   */
+  async createInviteToken(employeeId: string) {
+    return this.request<{
+      success: boolean;
+      token: string;
+      expiresAt: string;
+      message?: string;
+    }>('/invites/create-token', {
+      method: 'POST',
+      body: JSON.stringify({ employeeId }),
+    });
+  }
+
   // ==========================================================================
   // CHAT (Conversational Onboarding)
   // ==========================================================================
@@ -356,6 +377,18 @@ class ApiService {
   // ==========================================================================
 
   /**
+   * Login employee with phone + PIN
+   * Returns Firebase custom token and employee data
+   */
+  async pinLogin(phone: string, pin: string) {
+    return this.request<PinLoginResponse>('/employees/pin-login', {
+      method: 'POST',
+      body: JSON.stringify({ phone, pin }),
+    });
+  }
+
+  /**
+   * @deprecated Use pinLogin instead
    * Request OTP for employee login
    */
   async requestOtp(phone: string) {
@@ -366,6 +399,7 @@ class ApiService {
   }
 
   /**
+   * @deprecated Use pinLogin instead
    * Verify OTP and get authentication token
    */
   async verifyOtp(phone: string, otp: string) {
@@ -481,6 +515,87 @@ class ApiService {
     return this.request<{ success: boolean }>('/availability/chat/apply', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // ==========================================================================
+  // EMPLOYEE SCHEDULE (Employee-facing endpoints)
+  // ==========================================================================
+
+  /**
+   * Get employee's upcoming shifts
+   */
+  async getEmployeeSchedule() {
+    return this.request<EmployeeScheduleResponse>('/employee/schedule');
+  }
+
+  /**
+   * Get employee's shifts for a specific week
+   */
+  async getEmployeeWeekSchedule(weekStartDate: string) {
+    return this.request<EmployeeWeekScheduleResponse>(`/employee/schedule/week/${weekStartDate}`);
+  }
+
+  /**
+   * Get employee's upcoming shifts (limited)
+   */
+  async getEmployeeUpcomingShifts(limit: number = 10) {
+    return this.request<EmployeeUpcomingShiftsResponse>(`/employee/schedule/upcoming?limit=${limit}`);
+  }
+
+  // ==========================================================================
+  // MANAGER SCHEDULE (Manager-facing endpoints)
+  // ==========================================================================
+
+  /**
+   * List all schedules for the establishment
+   */
+  async getSchedules() {
+    return this.request<ManagerSchedule[]>('/schedules');
+  }
+
+  /**
+   * Get schedule for a specific week
+   */
+  async getWeekSchedule(weekStartDate: string) {
+    return this.request<ManagerSchedule>(`/schedules/week/${weekStartDate}`);
+  }
+
+  /**
+   * Generate a new schedule
+   */
+  async generateSchedule(weekStartDate: string) {
+    return this.request<GenerateScheduleResponse>('/schedules/generate', {
+      method: 'POST',
+      body: JSON.stringify({ weekStartDate }),
+    });
+  }
+
+  /**
+   * Update a schedule (edit shifts)
+   */
+  async updateSchedule(scheduleId: string, shifts: ManagerShift[]) {
+    return this.request<{ success: boolean }>(`/schedules/${scheduleId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ shifts }),
+    });
+  }
+
+  /**
+   * Publish a schedule
+   */
+  async publishSchedule(scheduleId: string) {
+    return this.request<{ success: boolean; notificationsSent: number }>(`/schedules/${scheduleId}/publish`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Delete a schedule
+   */
+  async deleteSchedule(scheduleId: string) {
+    return this.request<{ success: boolean }>(`/schedules/${scheduleId}`, {
+      method: 'DELETE',
     });
   }
 }
@@ -631,6 +746,99 @@ export interface VerifyOtpResponse {
   user?: EmployeeUser;
   error?: string;
   message?: string;
+}
+
+export interface PinLoginResponse {
+  success: boolean;
+  token?: string;
+  employee?: {
+    id: string;
+    name: string;
+    phone: string;
+    establishmentId: string;
+    status: string;
+  };
+  error?: string;
+  message?: string;
+}
+
+// Employee Schedule Types
+export interface EmployeeShift {
+  id: string;
+  scheduleId?: string;
+  date: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  shiftType?: string;
+  shiftLabel?: string;
+  status: string;
+  establishmentName?: string;
+}
+
+export interface EmployeeScheduleResponse {
+  success: boolean;
+  shifts: EmployeeShift[];
+  schedules: Array<{
+    id: string;
+    weekStartDate: string;
+    weekEndDate: string;
+    establishmentName: string;
+    status: string;
+    publishedAt?: string;
+  }>;
+  totalShifts: number;
+  message?: string;
+}
+
+export interface EmployeeWeekScheduleResponse {
+  success: boolean;
+  scheduleId: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  shifts: EmployeeShift[];
+  totalShifts: number;
+}
+
+export interface EmployeeUpcomingShiftsResponse {
+  success: boolean;
+  shifts: EmployeeShift[];
+  hasMore: boolean;
+}
+
+// Manager Schedule Types
+export interface ManagerShift {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  shiftType?: ShiftType;
+  shiftLabel?: string;
+  status: 'scheduled' | 'swap_pending' | 'absent' | 'covered';
+}
+
+export interface ManagerSchedule {
+  id: string;
+  establishmentId: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  shifts: ManagerShift[];
+  status: 'draft' | 'published' | 'archived';
+  generatedBy: 'ai' | 'manual';
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
+
+export interface GenerateScheduleResponse extends ManagerSchedule {
+  validation: {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  };
 }
 
 // Export singleton instance

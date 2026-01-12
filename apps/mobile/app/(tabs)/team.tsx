@@ -20,10 +20,12 @@ import * as Contacts from 'expo-contacts';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { colors, spacing, fontSize, borderRadius, shadows } from '../../src/theme';
 import { useEstablishment } from '../../src/hooks/useEstablishment';
-import { Employee } from '../../src/services/api';
+import { Employee, api } from '../../src/services/api';
+import { shareEmployeeInvite, copyInviteLink } from '../../src/services/share';
 
 export default function TeamScreen() {
-  const { employees, loading, addEmployee, updateEmployee, removeEmployee, refreshEmployees } = useEstablishment();
+  const { employees, loading, addEmployee, updateEmployee, removeEmployee, refreshEmployees, establishment } = useEstablishment();
+  const [inviting, setInviting] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [name, setName] = useState('');
@@ -211,6 +213,84 @@ export default function TeamScreen() {
     );
   }, [removeEmployee]);
 
+  const handleInvite = useCallback(async (employee: Employee) => {
+    if (!establishment) {
+      Alert.alert('Erro', 'Estabelecimento não encontrado');
+      return;
+    }
+
+    setInviting(employee.id);
+
+    try {
+      // Create invite token
+      const result = await api.createInviteToken(employee.id);
+
+      if (result.success && result.token) {
+        // Share via native share sheet
+        const shareResult = await shareEmployeeInvite(
+          employee.name,
+          establishment.name,
+          result.token
+        );
+
+        if (shareResult.success && shareResult.action === 'shared') {
+          // Refresh to get updated invite status
+          await refreshEmployees();
+        }
+      } else {
+        Alert.alert('Erro', result.message || 'Não foi possível criar o convite');
+      }
+    } catch (error) {
+      console.error('Error inviting employee:', error);
+      Alert.alert('Erro', 'Não foi possível enviar o convite');
+    } finally {
+      setInviting(null);
+    }
+  }, [establishment, refreshEmployees]);
+
+  const handleCopyInviteLink = useCallback(async (employee: Employee) => {
+    setInviting(employee.id);
+
+    try {
+      const result = await api.createInviteToken(employee.id);
+
+      if (result.success && result.token) {
+        const copyResult = await copyInviteLink(result.token);
+
+        if (copyResult.success) {
+          Alert.alert('Link copiado!', 'Cole o link para enviar ao funcionário.');
+          await refreshEmployees();
+        }
+      } else {
+        Alert.alert('Erro', result.message || 'Não foi possível criar o link');
+      }
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível copiar o link');
+    } finally {
+      setInviting(null);
+    }
+  }, [refreshEmployees]);
+
+  const showInviteOptions = useCallback((employee: Employee) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    Alert.alert(
+      'Convidar Funcionário',
+      `Enviar convite para ${employee.name}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Copiar Link',
+          onPress: () => handleCopyInviteLink(employee),
+        },
+        {
+          text: 'Compartilhar',
+          onPress: () => handleInvite(employee),
+        },
+      ]
+    );
+  }, [handleInvite, handleCopyInviteLink]);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshEmployees();
@@ -286,6 +366,21 @@ export default function TeamScreen() {
         </View>
         <View style={styles.employeeRight}>
           <View style={[styles.statusDot, { backgroundColor: status.color }]} />
+          {/* Invite button - only show for pending employees */}
+          {item.status === 'pending' && (
+            <TouchableOpacity
+              style={styles.inviteButton}
+              onPress={() => showInviteOptions(item)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              disabled={inviting === item.id}
+            >
+              {inviting === item.id ? (
+                <ActivityIndicator size="small" color={colors.primary[600]} />
+              ) : (
+                <Ionicons name="paper-plane-outline" size={18} color={colors.primary[600]} />
+              )}
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => handleRemove(item)}
@@ -296,7 +391,7 @@ export default function TeamScreen() {
         </View>
       </Pressable>
     );
-  }, [getStatusConfig, getAvailabilityStatus, openEditModal, formatPhoneDisplay, handleRemove]);
+  }, [getStatusConfig, getAvailabilityStatus, openEditModal, formatPhoneDisplay, handleRemove, showInviteOptions, inviting]);
 
   const renderEmptyList = useCallback(() => (
     <View style={styles.emptyContainer}>
@@ -559,6 +654,9 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  inviteButton: {
+    padding: spacing.xs,
   },
   deleteButton: {
     padding: spacing.xs,
