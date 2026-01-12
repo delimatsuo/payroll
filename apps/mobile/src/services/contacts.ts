@@ -1,11 +1,15 @@
 /**
  * Contacts Service - Pick employees from phone contacts
  * Uses expo-contacts for native contact picker
+ * Falls back gracefully on web
  */
 
 import * as Contacts from 'expo-contacts';
 import * as Haptics from 'expo-haptics';
 import { Alert, Platform } from 'react-native';
+
+// Check if we're on a platform that supports contacts
+const isNativePlatform = Platform.OS === 'ios' || Platform.OS === 'android';
 
 export type PickedContact = {
   name: string;
@@ -14,17 +18,20 @@ export type PickedContact = {
 
 /**
  * Request contacts permission
- * Returns true if granted
+ * Returns true if granted (always false on web)
  */
 export const requestContactsPermission = async (): Promise<boolean> => {
+  if (!isNativePlatform) return false;
   const { status } = await Contacts.requestPermissionsAsync();
   return status === 'granted';
 };
 
 /**
  * Check if contacts permission is granted
+ * Returns false on web
  */
 export const hasContactsPermission = async (): Promise<boolean> => {
+  if (!isNativePlatform) return false;
   const { status } = await Contacts.getPermissionsAsync();
   return status === 'granted';
 };
@@ -81,10 +88,27 @@ export const formatPhoneDisplay = (phone: string): string => {
 };
 
 /**
+ * Check if contact picker is available on this platform
+ */
+export const isContactPickerAvailable = (): boolean => {
+  return isNativePlatform;
+};
+
+/**
  * Open native contact picker and return selected contact
- * Returns null if cancelled or no valid phone found
+ * Returns null if cancelled, no valid phone found, or not supported
  */
 export const pickContact = async (): Promise<PickedContact | null> => {
+  // Check if we're on a supported platform
+  if (!isNativePlatform) {
+    Alert.alert(
+      'Não disponível',
+      'A seleção de contatos está disponível apenas no aplicativo móvel. Por favor, digite os dados manualmente.',
+      [{ text: 'OK' }]
+    );
+    return null;
+  }
+
   try {
     // Check/request permission
     const hasPermission = await hasContactsPermission();
