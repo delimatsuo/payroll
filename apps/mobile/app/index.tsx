@@ -1,38 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useRouter, Href } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { colors } from '../src/theme';
 import { useAuth } from '../src/hooks/useAuth';
 import { api } from '../src/services/api';
 
-const EMPLOYEE_USER_KEY = '@escala_simples:employee_user';
-
 export default function SplashScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [checkingEmployee, setCheckingEmployee] = useState(true);
 
   useEffect(() => {
     if (loading) return;
 
     const checkAuthFlow = async () => {
-      // First, check if there's a stored employee user
-      try {
-        const storedEmployee = await AsyncStorage.getItem(EMPLOYEE_USER_KEY);
-        if (storedEmployee) {
-          // This is an employee - go to employee home
-          setCheckingEmployee(false);
-          router.replace('/(employee)/home' as Href);
-          return;
-        }
-      } catch (err) {
-        console.error('Error checking employee storage:', err);
-      }
-
-      setCheckingEmployee(false);
-
-      // Not an employee - check manager/owner flow
+      // Not logged in - go to login
       if (!user) {
         router.replace('/(auth)/login');
         return;
@@ -47,17 +28,17 @@ export default function SplashScreen() {
           if (result.status === 'active') {
             router.replace('/(tabs)');
           } else {
-            // Has establishment but not active - needs to complete onboarding CRUD
-            router.replace('/(onboarding)/name');
+            // Has establishment but not active - needs to complete onboarding
+            router.replace('/(onboarding)/team');
           }
         } else {
-          // No establishment - start conversational onboarding (chat)
-          router.replace('/(onboarding)/chat');
+          // No establishment - go to signup (which now includes business creation)
+          router.replace('/(auth)/signup');
         }
       } catch (error) {
         console.error('Error checking onboarding:', error);
-        // On error, start with chat onboarding
-        router.replace('/(onboarding)/chat');
+        // On error, go to signup
+        router.replace('/(auth)/signup');
       }
     };
 

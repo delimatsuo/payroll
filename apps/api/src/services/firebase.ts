@@ -31,6 +31,8 @@ export const collections = {
   // Employee authentication
   employeeUsers: db.collection('employeeUsers'),
   otpCodes: db.collection('otpCodes'),
+  // Employee web tokens
+  employeeTokens: db.collection('employeeTokens'),
 };
 
 export default admin;

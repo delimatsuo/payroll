@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, borderRadius } from '../../src/theme';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -158,15 +158,6 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.employeeLink}
-            onPress={() => router.push('/(employee)/login' as Href)}
-          >
-            <Text style={styles.employeeLinkText}>
-              Sou funcionário
-            </Text>
-          </TouchableOpacity>
-
           <Text style={styles.terms}>
             Ao continuar, você concorda com nossos{' '}
             <Text style={styles.link}>Termos de Uso</Text> e{' '}
@@ -280,16 +271,6 @@ const styles = StyleSheet.create({
   signupTextBold: {
     color: colors.primary[600],
     fontWeight: '600',
-  },
-  employeeLink: {
-    marginTop: spacing.md,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  employeeLinkText: {
-    fontSize: fontSize.md,
-    color: colors.text.tertiary,
-    fontWeight: '500',
   },
   terms: {
     marginTop: spacing.lg,

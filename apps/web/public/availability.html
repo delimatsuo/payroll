@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minha Disponibilidade - Escala Simples</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">Escala<span class="logo-accent">Simples</span></div>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Carregando...</p>
+    </div>
+
+    <div id="error" class="error-container" style="display: none;">
+      <div class="error-icon">😕</div>
+      <h2 class="error-title">Link inválido ou expirado</h2>
+      <p class="error-message">Este link não é mais válido. Peça um novo link ao seu gerente via WhatsApp.</p>
+    </div>
+
+    <main id="content" style="display: none;">
+      <h1 class="page-title">Sua Disponibilidade</h1>
+      <p class="page-subtitle">Selecione os dias que você pode trabalhar</p>
+
+      <div class="card mt-lg">
+        <div class="card-title">Dias Disponíveis</div>
+        <p class="card-subtitle mb-md">Toque nos dias em que você PODE trabalhar</p>
+
+        <div class="day-selector" id="day-selector">
+          <!-- Days will be rendered here -->
+        </div>
+
+        <div id="time-restrictions" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">Horário disponível (opcional)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="time" class="form-input" id="start-time" value="08:00">
+              <span>até</span>
+              <input type="time" class="form-input" id="end-time" value="22:00">
+            </div>
+            <p class="card-subtitle mt-sm">Deixe em branco para disponibilidade total</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Observações</div>
+        <div class="form-group">
+          <textarea
+            class="form-input"
+            id="notes"
+            rows="3"
+            placeholder="Ex: Faço faculdade às terças à noite..."
+          ></textarea>
+        </div>
+      </div>
+
+      <button class="btn btn-primary mt-lg" id="save-btn">
+        Salvar Disponibilidade
+      </button>
+
+      <p class="text-center mt-md card-subtitle">
+        Você pode atualizar sua disponibilidade a qualquer momento.
+      </p>
+    </main>
+
+    <div id="success" class="success-container" style="display: none;">
+      <div class="success-icon">✅</div>
+      <h2 class="success-title">Disponibilidade Salva!</h2>
+      <p class="success-message">Seu gerente foi notificado. Você receberá sua escala via WhatsApp.</p>
+    </div>
+
+    <footer class="footer">
+      <p>Escala Simples &copy; 2026</p>
+    </footer>
+  </div>
+
+  <script>
+    const DAYS = [
+      { id: 0, short: 'Dom', full: 'Domingo' },
+      { id: 1, short: 'Seg', full: 'Segunda' },
+      { id: 2, short: 'Ter', full: 'Terça' },
+      { id: 3, short: 'Qua', full: 'Quarta' },
+      { id: 4, short: 'Qui', full: 'Quinta' },
+      { id: 5, short: 'Sex', full: 'Sexta' },
+      { id: 6, short: 'Sáb', full: 'Sábado' },
+    ];
+
+    // Get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || window.location.pathname.split('/').pop();
+
+    // API base URL
+    const API_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://api.escalasimples.com.br';
+
+    // State
+    let availability = {};
+    let employeeData = null;
+
+    async function loadAvailability() {
+      if (!token) {
+        showError();
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/employee/availability/${token}`);
+
+        if (!response.ok) {
+          throw new Error('Invalid token');
+        }
+
+        const data = await response.json();
+        employeeData = data;
+        availability = data.recurringAvailability || {};
+
+        renderForm();
+      } catch (error) {
+        console.error('Error loading availability:', error);
+        showError();
+      }
+    }
+
+    function renderForm() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Render day selector
+      const container = document.getElementById('day-selector');
+      container.innerHTML = DAYS.map(day => {
+        const isAvailable = availability[day.id]?.available !== false;
+        return `
+          <button
+            type="button"
+            class="day-btn ${isAvailable ? 'active' : 'unavailable'}"
+            data-day="${day.id}"
+          >
+            <span class="day-btn-label">${day.short}</span>
+          </button>
+        `;
+      }).join('');
+
+      // Add click handlers
+      container.querySelectorAll('.day-btn').forEach(btn => {
+        btn.addEventListener('click', () => toggleDay(parseInt(btn.dataset.day)));
+      });
+
+      // Load notes if any
+      if (employeeData?.notes) {
+        document.getElementById('notes').value = employeeData.notes;
+      }
+    }
+
+    function toggleDay(dayId) {
+      const btn = document.querySelector(`[data-day="${dayId}"]`);
+      const isCurrentlyAvailable = btn.classList.contains('active');
+
+      if (isCurrentlyAvailable) {
+        btn.classList.remove('active');
+        btn.classList.add('unavailable');
+        availability[dayId] = { available: false };
+      } else {
+        btn.classList.remove('unavailable');
+        btn.classList.add('active');
+        availability[dayId] = { available: true };
+      }
+    }
+
+    async function saveAvailability() {
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Salvando...';
+
+      try {
+        const notes = document.getElementById('notes').value.trim();
+
+        const response = await fetch(`${API_URL}/employee/availability/${token}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recurringAvailability: availability,
+            notes: notes || undefined,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save');
+        }
+
+        showSuccess();
+      } catch (error) {
+        console.error('Error saving availability:', error);
+        alert('Erro ao salvar. Tente novamente.');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Salvar Disponibilidade';
+      }
+    }
+
+    function showError() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('content').style.display = 'none';
+    }
+
+    function showSuccess() {
+      document.getElementById('content').style.display = 'none';
+      document.getElementById('success').style.display = 'block';
+    }
+
+    // Event listeners
+    document.getElementById('save-btn').addEventListener('click', saveAvailability);
+
+    // Initial load
+    loadAvailability();
+  </script>
+</body>
+</html>

@@ -1,4 +1,9 @@
-import { useState } from 'react';
+/**
+ * Onboarding Complete Screen
+ * Step 2 of 2 - Review and activate establishment
+ */
+
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,11 +13,12 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { colors, spacing, fontSize, borderRadius, shadows } from '../../src/theme';
-import { useOnboarding } from '../../src/hooks';
+import { api, Establishment } from '../../src/services/api';
 
 const ESTABLISHMENT_TYPE_LABELS: Record<string, string> = {
   restaurant: 'Restaurante',
@@ -23,22 +29,40 @@ const ESTABLISHMENT_TYPE_LABELS: Record<string, string> = {
 
 export default function OnboardingCompleteScreen() {
   const router = useRouter();
-  const { state, activateEstablishment } = useOnboarding();
   const [loading, setLoading] = useState(false);
   const [activated, setActivated] = useState(false);
+  const [establishment, setEstablishment] = useState<Establishment | null>(null);
+  const [fetchingData, setFetchingData] = useState(true);
+
+  useEffect(() => {
+    const fetchEstablishment = async () => {
+      try {
+        const result = await api.getEstablishment();
+        if (result.success !== false && result.id) {
+          setEstablishment(result as unknown as Establishment);
+        }
+      } catch (error) {
+        console.error('Error fetching establishment:', error);
+      } finally {
+        setFetchingData(false);
+      }
+    };
+
+    fetchEstablishment();
+  }, []);
 
   const handleActivate = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
 
     try {
-      const result = await activateEstablishment();
+      const result = await api.activateEstablishment();
 
-      if (result.success) {
+      if (result.success !== false) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setActivated(true);
       } else {
-        Alert.alert('Erro', result.error || 'Não foi possível ativar o estabelecimento');
+        Alert.alert('Erro', result.message || 'Não foi possível ativar o estabelecimento');
       }
     } catch (error) {
       Alert.alert('Erro', 'Ocorreu um erro inesperado');
@@ -49,7 +73,7 @@ export default function OnboardingCompleteScreen() {
 
   const handleGoToApp = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace('/(tabs)');
+    router.replace('/(tabs)' as Href);
   };
 
   const handleBack = () => {
@@ -57,16 +81,20 @@ export default function OnboardingCompleteScreen() {
     router.back();
   };
 
-  // Get summary info
-  const openDays = Object.values(state.operatingHours).filter((h) => h.isOpen).length;
+  if (fetchingData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary[600]} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Progress Indicator - Step 5 of 5 */}
+      {/* Progress Indicator - Step 2 of 2 */}
       <View style={styles.progress}>
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
-        <View style={styles.progressDot} />
         <View style={styles.progressDot} />
         <View style={[styles.progressDot, styles.progressDotActive]} />
       </View>
@@ -74,23 +102,23 @@ export default function OnboardingCompleteScreen() {
       {!activated ? (
         <>
           {/* Header */}
-          <View style={styles.header}>
+          <Animated.View entering={FadeInDown.duration(300)} style={styles.header}>
             <Text style={styles.title}>Tudo pronto!</Text>
             <Text style={styles.subtitle}>
-              Confira o resumo do seu estabelecimento
+              Confirme os dados e ative seu estabelecimento
             </Text>
-          </View>
+          </Animated.View>
 
           <View style={styles.content}>
             {/* Summary Card */}
-            <View style={styles.summaryCard}>
+            <Animated.View entering={FadeInDown.duration(300).delay(100)} style={styles.summaryCard}>
               <View style={styles.summaryRow}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.primary[100] }]}>
                   <Ionicons name="storefront" size={20} color={colors.primary[600]} />
                 </View>
                 <View style={styles.summaryInfo}>
                   <Text style={styles.summaryLabel}>Estabelecimento</Text>
-                  <Text style={styles.summaryValue}>{state.establishmentName}</Text>
+                  <Text style={styles.summaryValue}>{establishment?.name || 'Não informado'}</Text>
                 </View>
               </View>
 
@@ -103,53 +131,19 @@ export default function OnboardingCompleteScreen() {
                 <View style={styles.summaryInfo}>
                   <Text style={styles.summaryLabel}>Tipo</Text>
                   <Text style={styles.summaryValue}>
-                    {ESTABLISHMENT_TYPE_LABELS[state.establishmentType] || state.establishmentType}
+                    {ESTABLISHMENT_TYPE_LABELS[establishment?.type || ''] || 'Não informado'}
                   </Text>
                 </View>
               </View>
+            </Animated.View>
 
-              <View style={styles.separator} />
-
-              <View style={styles.summaryRow}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.success.light }]}>
-                  <Ionicons name="calendar" size={20} color={colors.success.main} />
-                </View>
-                <View style={styles.summaryInfo}>
-                  <Text style={styles.summaryLabel}>Dias de funcionamento</Text>
-                  <Text style={styles.summaryValue}>{openDays} dias por semana</Text>
-                </View>
-              </View>
-
-              <View style={styles.separator} />
-
-              <View style={styles.summaryRow}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.warning.light }]}>
-                  <Ionicons name="people" size={20} color={colors.warning.main} />
-                </View>
-                <View style={styles.summaryInfo}>
-                  <Text style={styles.summaryLabel}>Mínimo por turno</Text>
-                  <Text style={styles.summaryValue}>
-                    {state.settings.minEmployeesPerShift} funcionário{state.settings.minEmployeesPerShift !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.separator} />
-
-              <View style={styles.summaryRow}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.system.purple + '20' }]}>
-                  <Ionicons name="swap-horizontal" size={20} color={colors.system.purple} />
-                </View>
-                <View style={styles.summaryInfo}>
-                  <Text style={styles.summaryLabel}>Trocas de turno</Text>
-                  <Text style={styles.summaryValue}>
-                    {state.settings.swapsAllowed
-                      ? `Permitidas (máx. ${state.settings.maxSwapsPerMonth}/mês)`
-                      : 'Não permitidas'}
-                  </Text>
-                </View>
-              </View>
-            </View>
+            {/* Info Card */}
+            <Animated.View entering={FadeInDown.duration(300).delay(200)} style={styles.infoCard}>
+              <Ionicons name="information-circle" size={20} color={colors.info.main} />
+              <Text style={styles.infoText}>
+                Você pode configurar horários de funcionamento, regras de troca e outras opções nas Configurações após ativar.
+              </Text>
+            </Animated.View>
           </View>
 
           {/* Footer */}
@@ -161,7 +155,7 @@ export default function OnboardingCompleteScreen() {
               ]}
               onPress={handleBack}
             >
-              <Text style={styles.backButtonText}>Voltar e editar</Text>
+              <Text style={styles.backButtonText}>Voltar</Text>
             </Pressable>
 
             <Pressable
@@ -184,15 +178,15 @@ export default function OnboardingCompleteScreen() {
       ) : (
         <>
           {/* Success State */}
-          <View style={styles.successContent}>
+          <Animated.View entering={FadeInDown.duration(400)} style={styles.successContent}>
             <View style={styles.successIcon}>
               <Ionicons name="checkmark-circle" size={80} color={colors.success.main} />
             </View>
             <Text style={styles.successTitle}>Estabelecimento ativado!</Text>
             <Text style={styles.successSubtitle}>
-              Seu estabelecimento está pronto. Agora você pode adicionar funcionários e criar escalas.
+              Seu estabelecimento está pronto. Agora você pode gerenciar funcionários e criar escalas.
             </Text>
-          </View>
+          </Animated.View>
 
           <View style={styles.footer}>
             <Pressable
@@ -216,6 +210,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
     paddingHorizontal: spacing.md,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // Progress
   progress: {
@@ -254,6 +253,7 @@ const styles = StyleSheet.create({
   // Content
   content: {
     flex: 1,
+    gap: spacing.lg,
   },
   // Summary Card
   summaryCard: {
@@ -291,7 +291,21 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border.light,
-    marginLeft: 40 + spacing.md, // icon width + margin
+    marginLeft: 40 + spacing.md,
+  },
+  // Info Card
+  infoCard: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    backgroundColor: colors.info.light,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: fontSize.footnote,
+    color: colors.info.dark,
+    lineHeight: 20,
   },
   // Success State
   successContent: {

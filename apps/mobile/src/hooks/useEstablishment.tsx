@@ -40,6 +40,12 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initialLoadDone = useRef(false);
+  const activeIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    activeIdRef.current = activeEstablishmentId;
+  }, [activeEstablishmentId]);
 
   // Derived state: current establishment
   const establishment = establishments.find(e => e.id === activeEstablishmentId) || null;
@@ -82,7 +88,7 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
     setEmployees([]);
   }, [establishments]);
 
-  // Load all establishments for the user
+  // Load all establishments for the user (v2 - with direct employee fetch)
   const refreshEstablishments = useCallback(async () => {
     if (!user) {
       setEstablishments([]);
@@ -102,8 +108,10 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
         setEstablishments(result);
 
         // Auto-select if none selected or selection no longer valid
+        // Use ref to avoid dependency loop
         if (result.length > 0) {
-          const currentStillValid = activeEstablishmentId && result.some(e => e.id === activeEstablishmentId);
+          const currentId = activeIdRef.current;
+          const currentStillValid = currentId && result.some(e => e.id === currentId);
 
           if (!currentStillValid) {
             // Select first establishment
@@ -111,6 +119,27 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
             setActiveEstablishmentId(firstId);
             api.setActiveEstablishment(firstId);
             await AsyncStorage.setItem(ACTIVE_ESTABLISHMENT_KEY, firstId);
+
+            // Directly fetch employees now that API has the establishment ID set
+            try {
+              const empResult = await api.getEmployees();
+              if (Array.isArray(empResult)) {
+                setEmployees(empResult);
+              }
+            } catch (empErr) {
+              console.error('Error fetching employees:', empErr);
+            }
+          } else {
+            // Also fetch employees for existing establishment
+            api.setActiveEstablishment(currentId);
+            try {
+              const empResult = await api.getEmployees();
+              if (Array.isArray(empResult)) {
+                setEmployees(empResult);
+              }
+            } catch (empErr) {
+              console.error('Error fetching employees:', empErr);
+            }
           }
         } else {
           // No establishments
@@ -128,7 +157,7 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       initialLoadDone.current = true;
     }
-  }, [user, activeEstablishmentId]);
+  }, [user]); // Removed activeEstablishmentId dependency
 
   // Refresh single establishment (for updates)
   const refreshEstablishment = useCallback(async () => {
@@ -149,7 +178,7 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
   }, [activeEstablishmentId]);
 
   const refreshEmployees = useCallback(async () => {
-    if (!establishment) {
+    if (!activeEstablishmentId) {
       setEmployees([]);
       return;
     }
@@ -166,7 +195,7 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Erro ao carregar funcionários:', err);
     }
-  }, [establishment]);
+  }, [activeEstablishmentId]);
 
   const addEmployee = async (name: string, phone: string) => {
     if (!establishment) {
@@ -230,9 +259,9 @@ export function EstablishmentProvider({ children }: { children: ReactNode }) {
     refreshEstablishments();
   }, [refreshEstablishments]);
 
-  // Load employees when active establishment changes
+  // Load employees when active establishment changes or becomes available
   useEffect(() => {
-    if (establishment && initialLoadDone.current) {
+    if (activeEstablishmentId && initialLoadDone.current) {
       refreshEmployees();
     }
   }, [activeEstablishmentId, refreshEmployees]);

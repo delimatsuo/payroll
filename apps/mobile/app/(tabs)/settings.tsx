@@ -540,14 +540,7 @@ export default function SettingsScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={0}
           >
-            {/* DEBUG: Show message count - ALWAYS VISIBLE FOR DEBUGGING */}
-            <View style={{ padding: 10, backgroundColor: '#ff0000', marginBottom: 10 }}>
-              <Text style={{ fontSize: 14, color: '#ffffff', fontWeight: 'bold' }}>
-                DEBUG: {messages.length} mensagens: [{messages.map(m => m.role).join(', ')}]
-              </Text>
-            </View>
-
-            {/* Chat Messages - using ScrollView for reliability */}
+            {/* Chat Messages */}
             <ScrollView
               ref={chatScrollRef}
               contentContainerStyle={styles.chatScrollContent}

@@ -1,0 +1,14 @@
+{
+  "name": "@escala-simples/web",
+  "version": "1.0.0",
+  "description": "Employee web portal for Escala Simples",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve public -l 3002",
+    "build": "echo 'Static HTML - no build needed'",
+    "start": "npx serve public -l 3002"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

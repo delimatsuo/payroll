@@ -65,7 +65,7 @@ export function EstablishmentSwitcher() {
   const handleAddNew = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsOpen(false);
-    router.push('/(onboarding)/chat');
+    router.push('/(onboarding)/team');
   }, [router]);
 
   // Don't show if user has no establishments or only one

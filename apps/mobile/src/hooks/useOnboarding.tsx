@@ -155,10 +155,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   };
 
   const activateEstablishment = async () => {
-    if (!state.establishment) {
-      return { success: false, error: 'Nenhum estabelecimento criado' };
-    }
-
+    // Note: api.activateEstablishment uses the active establishment ID
+    // that's already set via useEstablishment hook, so we don't need
+    // to check state.establishment here
     try {
       const result = await api.activateEstablishment();
 

@@ -11,6 +11,7 @@ import schedulesRoutes from './routes/schedules';
 import employeeAuthRoutes from './routes/employee-auth';
 import employeeAvailabilityRoutes from './routes/employee-availability';
 import employeeScheduleRoutes from './routes/employee-schedule';
+import employeePublicRoutes from './routes/employeePublic';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -78,7 +79,11 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// API Routes
+// Public routes (no auth required - validated via tokens)
+app.use('/employee', employeePublicRoutes);
+app.use('/swap', employeePublicRoutes);
+
+// API Routes (require authentication)
 app.use('/establishment', establishmentRoutes);
 app.use('/employees', employeesRoutes);
 app.use('/invites', invitesRoutes);

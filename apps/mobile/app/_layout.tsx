@@ -22,7 +22,6 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="(employee)" options={{ headerShown: false }} />
           </Stack>
         </EstablishmentProvider>
       </AuthProvider>

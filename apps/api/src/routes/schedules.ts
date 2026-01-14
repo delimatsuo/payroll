@@ -499,10 +499,13 @@ router.post('/:id/publish', async (req: Request, res: Response) => {
       // Format notification
       const weekStart = data?.weekStartDate;
       const weekEnd = data?.weekEndDate;
+      const establishmentId = data?.establishmentId;
 
       notificationPromises.push(
         sendScheduleNotification(
           phone,
+          employeeId,
+          establishmentId,
           establishmentName,
           weekStart,
           weekEnd,

@@ -104,9 +104,24 @@ export default function OnboardingTeamScreen() {
     );
   }, []);
 
+  const isNameValid = (name: string) => name.trim().length >= 2;
+  const isPhoneValid = (phone: string) => phone.replace(/\D/g, '').length === 11;
+
+  const getEmployeeErrors = (emp: EmployeeInput): string[] => {
+    const errors: string[] = [];
+    if (emp.name.trim().length > 0 && !isNameValid(emp.name)) {
+      errors.push('Nome muito curto');
+    }
+    const phoneDigits = emp.phone.replace(/\D/g, '');
+    if (phoneDigits.length > 0 && phoneDigits.length < 11) {
+      errors.push(`Telefone incompleto (${phoneDigits.length}/11 dígitos)`);
+    }
+    return errors;
+  };
+
   const getValidEmployees = useCallback(() => {
     return employees.filter(
-      (emp) => emp.name.trim().length >= 2 && emp.phone.replace(/\D/g, '').length === 11
+      (emp) => isNameValid(emp.name) && isPhoneValid(emp.phone)
     );
   }, [employees]);
 
@@ -171,11 +186,8 @@ export default function OnboardingTeamScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        {/* Progress Indicator - Step 4 of 5 */}
+        {/* Progress Indicator - Step 1 of 2 */}
         <View style={styles.progress}>
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
           <View style={[styles.progressDot, styles.progressDotActive]} />
           <View style={styles.progressDot} />
         </View>
@@ -236,7 +248,12 @@ export default function OnboardingTeamScreen() {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>WhatsApp</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    employee.phone.replace(/\D/g, '').length > 0 &&
+                      employee.phone.replace(/\D/g, '').length < 11 &&
+                      styles.inputError,
+                  ]}
                   placeholder="(00) 00000-0000"
                   placeholderTextColor={colors.text.quaternary}
                   value={employee.phone}
@@ -245,6 +262,17 @@ export default function OnboardingTeamScreen() {
                   maxLength={15}
                 />
               </View>
+
+              {/* Validation Errors */}
+              {getEmployeeErrors(employee).length > 0 && (
+                <View style={styles.errorContainer}>
+                  {getEmployeeErrors(employee).map((error, i) => (
+                    <Text key={i} style={styles.errorText}>
+                      <Ionicons name="alert-circle" size={12} color={colors.error.main} /> {error}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </Animated.View>
           ))}
 
@@ -438,6 +466,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     fontSize: fontSize.body,
     color: colors.text.primary,
+  },
+  inputError: {
+    borderColor: colors.error.main,
+    backgroundColor: colors.error.light,
+  },
+  errorContainer: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  errorText: {
+    fontSize: fontSize.caption1,
+    color: colors.error.main,
+    marginBottom: spacing.xxs,
   },
   // Add Buttons
   addButtonsContainer: {

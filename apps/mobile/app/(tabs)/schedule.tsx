@@ -17,7 +17,8 @@ import { useEstablishment } from '../../src/hooks/useEstablishment';
 import { DayTimelineView } from '../../src/components/schedule/DayTimelineView';
 import { ShiftListView } from '../../src/components/schedule/ShiftListView';
 import { ConflictAlert } from '../../src/components/schedule/ConflictAlert';
-import type { ShiftType, ShiftDefinition } from '../../src/services/api';
+import { api } from '../../src/services/api';
+import type { ShiftType, ShiftDefinition, ManagerSchedule } from '../../src/services/api';
 
 const DAYS_SHORT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const DAYS_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -164,9 +165,11 @@ function timeRangesOverlap(
 }
 
 export default function ScheduleScreen() {
-  const { establishment, employees, loading } = useEstablishment();
+  const { establishment, employees, loading, refreshEstablishment } = useEstablishment();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [generating, setGenerating] = useState(false);
+  const [generatedSchedule, setGeneratedSchedule] = useState<ManagerSchedule | null>(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
 
   // Get current week dates
   const weekDates = useMemo(() => {
@@ -202,32 +205,43 @@ export default function ScheduleScreen() {
     return result;
   }, [shiftDefinitions]);
 
-  // Build week schedule data with multiple shifts per day (considering availability)
+  // Build week schedule data with multiple shifts per day
+  // Uses API-generated schedule if available, otherwise shows preview based on availability
   const weekSchedule = useMemo(() => {
     const activeEmployees = employees.filter((e) => e.status === 'active') as EmployeeWithAvailability[];
 
     return weekDates.map((date) => {
       const dayOfWeek = date.getDay();
+      const dateStr = date.toISOString().split('T')[0];
       const dayHours = establishment?.operatingHours?.[dayOfWeek];
       const isOpen = dayHours?.isOpen ?? false;
 
       const openTime = dayHours?.openTime || '00:00';
       const closeTime = dayHours?.closeTime || '23:59';
 
-      const shifts: GeneratedShift[] = [];
+      let shifts: GeneratedShift[] = [];
       const conflicts: ShiftConflict[] = [];
 
-      if (isOpen && activeEmployees.length > 0) {
-        // Track assigned employees for this day to avoid double-booking
+      // If we have a generated schedule from API, use those shifts
+      if (generatedSchedule?.shifts) {
+        const dayShifts = generatedSchedule.shifts.filter((s) => s.date === dateStr);
+        shifts = dayShifts.map((s) => ({
+          employeeId: s.employeeId,
+          employeeName: s.employeeName,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          shiftType: (s.shiftType || 'custom') as ShiftType,
+          shiftLabel: s.shiftLabel || 'Turno',
+        }));
+      } else if (isOpen && activeEmployees.length > 0) {
+        // Fallback: Show preview based on availability (for when no schedule exists)
         const assignedEmployeeIds = new Set<string>();
 
         shiftDefinitions.forEach((shiftDef) => {
-          // Find available employees for this shift
           const availableForShift: EmployeeWithAvailability[] = [];
           const unavailableList: Array<{ id: string; name: string; reason: string }> = [];
 
           activeEmployees.forEach((emp) => {
-            // Skip if already assigned to another shift today
             if (assignedEmployeeIds.has(emp.id)) return;
 
             const availability = isEmployeeAvailable(
@@ -248,14 +262,12 @@ export default function ScheduleScreen() {
             }
           });
 
-          // Sort by FIFO (availabilityUpdatedAt) - earlier submissions get priority
           availableForShift.sort((a, b) => {
             const dateA = a.availabilityUpdatedAt ? new Date(a.availabilityUpdatedAt).getTime() : 0;
             const dateB = b.availabilityUpdatedAt ? new Date(b.availabilityUpdatedAt).getTime() : 0;
             return dateA - dateB;
           });
 
-          // Assign employees to this shift
           const toAssign = Math.min(shiftDef.minEmployees, availableForShift.length);
 
           for (let i = 0; i < toAssign; i++) {
@@ -272,7 +284,6 @@ export default function ScheduleScreen() {
             });
           }
 
-          // Track conflict if not enough employees
           if (toAssign < shiftDef.minEmployees) {
             conflicts.push({
               shiftType: shiftDef.type,
@@ -295,7 +306,7 @@ export default function ScheduleScreen() {
         conflicts,
       };
     });
-  }, [weekDates, establishment?.operatingHours, shiftDefinitions, employees]);
+  }, [weekDates, establishment?.operatingHours, shiftDefinitions, employees, generatedSchedule]);
 
   // Get shifts for the selected day
   const selectedDayData = useMemo(() => {
@@ -350,6 +361,41 @@ export default function ScheduleScreen() {
     return establishment?.operatingHours?.[dayOfWeek]?.isOpen ?? false;
   };
 
+  // Calculate week start date (Sunday) from selected date
+  const getWeekStartDate = useCallback((date: Date): string => {
+    const d = new Date(date);
+    const day = d.getDay();
+    d.setDate(d.getDate() - day);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  // Load existing schedule for the week
+  const loadWeekSchedule = useCallback(async (weekStart: string) => {
+    setLoadingSchedule(true);
+    try {
+      const response = await api.getWeekSchedule(weekStart);
+      if (response && !response.error) {
+        setGeneratedSchedule(response as ManagerSchedule);
+      } else {
+        setGeneratedSchedule(null);
+      }
+    } catch {
+      setGeneratedSchedule(null);
+    } finally {
+      setLoadingSchedule(false);
+    }
+  }, []);
+
+  // Load schedule when week changes
+  const weekStartDate = useMemo(() => getWeekStartDate(selectedDate), [selectedDate, getWeekStartDate]);
+
+  // Effect to load schedule when week changes
+  useMemo(() => {
+    if (establishment?.id) {
+      loadWeekSchedule(weekStartDate);
+    }
+  }, [weekStartDate, establishment?.id, loadWeekSchedule]);
+
   const handleGenerateSchedule = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -374,17 +420,59 @@ export default function ScheduleScreen() {
 
     setGenerating(true);
 
-    // Simulate schedule generation (in future, this will call the API)
-    setTimeout(() => {
-      setGenerating(false);
+    try {
+      const response = await api.generateSchedule(weekStartDate);
+
+      if (response.error) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert(
+          'Erro ao gerar escala',
+          response.message || 'Não foi possível gerar a escala. Tente novamente.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Schedule generated successfully
+      setGeneratedSchedule(response as ManagerSchedule);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Check for warnings
+      const validation = (response as any).validation;
+      if (validation?.warnings?.length > 0 || validation?.errors?.length > 0) {
+        const warnings = validation.warnings || [];
+        const errors = validation.errors || [];
+        const messages = [...errors, ...warnings];
+
+        Alert.alert(
+          response.alreadyExists ? 'Escala Existente' : 'Escala Gerada!',
+          response.alreadyExists
+            ? 'Já existe uma escala para esta semana.'
+            : `Escala criada com ${(response as ManagerSchedule).shifts?.length || 0} turnos.` +
+              (messages.length > 0 ? `\n\nAvisos:\n• ${messages.slice(0, 3).join('\n• ')}` : ''),
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          response.alreadyExists ? 'Escala Existente' : 'Escala Gerada!',
+          response.alreadyExists
+            ? 'Já existe uma escala para esta semana.'
+            : `Escala criada com ${(response as ManagerSchedule).shifts?.length || 0} turnos.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error generating schedule:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert(
-        'Em breve!',
-        'A geração automática de escalas será implementada em breve. Por enquanto, você pode gerenciar sua equipe.',
+        'Erro',
+        'Não foi possível conectar ao servidor. Verifique sua conexão.',
         [{ text: 'OK' }]
       );
-    }, 1500);
-  }, [employees, establishment]);
+    } finally {
+      setGenerating(false);
+    }
+  }, [employees, establishment, weekStartDate]);
 
   const getWeekRange = () => {
     const start = weekDates[0];
@@ -616,28 +704,53 @@ export default function ScheduleScreen() {
           </View>
         )}
 
-        {/* Generate Button */}
+        {/* Schedule Status & Generate Button */}
         <View style={styles.generateSection}>
+          {generatedSchedule && (
+            <View style={styles.scheduleStatusBadge}>
+              <View style={[
+                styles.scheduleStatusDot,
+                generatedSchedule.status === 'published' && styles.scheduleStatusDotPublished,
+              ]} />
+              <Text style={styles.scheduleStatusText}>
+                {generatedSchedule.status === 'draft' ? 'Rascunho' : 'Publicada'}
+                {' • '}
+                {generatedSchedule.shifts?.length || 0} turnos
+              </Text>
+            </View>
+          )}
           <Pressable
             style={({ pressed }) => [
               styles.generateButton,
               generating && styles.generateButtonDisabled,
               pressed && !generating && styles.generateButtonPressed,
+              generatedSchedule && styles.generateButtonSecondary,
             ]}
             onPress={handleGenerateSchedule}
-            disabled={generating}
+            disabled={generating || loadingSchedule}
           >
-            {generating ? (
-              <ActivityIndicator color={colors.text.inverse} />
+            {generating || loadingSchedule ? (
+              <ActivityIndicator color={generatedSchedule ? colors.primary[600] : colors.text.inverse} />
             ) : (
               <>
-                <Ionicons name="sparkles" size={20} color={colors.text.inverse} />
-                <Text style={styles.generateButtonText}>Gerar Escala da Semana</Text>
+                <Ionicons
+                  name={generatedSchedule ? 'refresh' : 'sparkles'}
+                  size={20}
+                  color={generatedSchedule ? colors.primary[600] : colors.text.inverse}
+                />
+                <Text style={[
+                  styles.generateButtonText,
+                  generatedSchedule && styles.generateButtonTextSecondary,
+                ]}>
+                  {generatedSchedule ? 'Regenerar Escala' : 'Gerar Escala da Semana'}
+                </Text>
               </>
             )}
           </Pressable>
           <Text style={styles.generateHint}>
-            Escala gerada automaticamente com IA
+            {generatedSchedule
+              ? 'Regenerar irá substituir a escala atual'
+              : 'Escala gerada automaticamente com IA'}
           </Text>
         </View>
 
@@ -1039,15 +1152,47 @@ const styles = StyleSheet.create({
   generateButtonDisabled: {
     backgroundColor: colors.neutral[300],
   },
+  generateButtonSecondary: {
+    backgroundColor: colors.primary[50],
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+  },
   generateButtonText: {
     fontSize: fontSize.body,
     fontWeight: '600',
     color: colors.text.inverse,
   },
+  generateButtonTextSecondary: {
+    color: colors.primary[600],
+  },
   generateHint: {
     fontSize: fontSize.footnote,
     color: colors.text.tertiary,
     marginTop: spacing.sm,
+  },
+  scheduleStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.elevated,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+    ...shadows.sm,
+  },
+  scheduleStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.warning.main,
+  },
+  scheduleStatusDotPublished: {
+    backgroundColor: colors.success.main,
+  },
+  scheduleStatusText: {
+    fontSize: fontSize.subhead,
+    color: colors.text.secondary,
   },
   // Stats Section
   statsSection: {

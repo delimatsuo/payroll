@@ -839,6 +839,8 @@ export interface GenerateScheduleResponse extends ManagerSchedule {
     errors: string[];
     warnings: string[];
   };
+  alreadyExists?: boolean;
+  message?: string;
 }
 
 // Export singleton instance

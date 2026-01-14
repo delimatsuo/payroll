@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minha Escala - Escala Simples</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">Escala<span class="logo-accent">Simples</span></div>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Carregando sua escala...</p>
+    </div>
+
+    <div id="error" class="error-container" style="display: none;">
+      <div class="error-icon">😕</div>
+      <h2 class="error-title">Link inválido ou expirado</h2>
+      <p class="error-message">Este link não é mais válido. Peça um novo link ao seu gerente via WhatsApp.</p>
+    </div>
+
+    <main id="content" style="display: none;">
+      <h1 class="page-title">Olá, <span id="employee-name">Funcionário</span>!</h1>
+      <p class="page-subtitle">Sua escala em <span id="establishment-name">-</span></p>
+
+      <div class="week-nav mt-lg">
+        <button class="week-nav-btn" id="prev-week">‹</button>
+        <span class="week-range" id="week-range">-</span>
+        <button class="week-nav-btn" id="next-week">›</button>
+      </div>
+
+      <div id="shifts-container">
+        <!-- Shifts will be rendered here -->
+      </div>
+
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-icon">📅</div>
+        <p>Nenhum turno agendado para esta semana.</p>
+      </div>
+
+      <div class="card mt-lg">
+        <div class="card-title">Precisa trocar um turno?</div>
+        <p class="card-subtitle mt-sm">Envie uma mensagem no WhatsApp dizendo qual dia você não pode trabalhar.</p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>Escala Simples &copy; 2026</p>
+      <p>Dúvidas? Fale com seu gerente.</p>
+    </footer>
+  </div>
+
+  <script>
+    const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const DAYS_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+    // Get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || window.location.pathname.split('/').pop();
+
+    // API base URL
+    const API_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://api.escalasimples.com.br';
+
+    let currentWeekStart = getWeekStart(new Date());
+    let scheduleData = null;
+
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    function formatWeekRange(start) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+
+      if (start.getMonth() === end.getMonth()) {
+        return `${start.getDate()} - ${end.getDate()} de ${MONTHS_PT[start.getMonth()]}`;
+      }
+      return `${start.getDate()} ${MONTHS_PT[start.getMonth()]} - ${end.getDate()} ${MONTHS_PT[end.getMonth()]}`;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr + 'T00:00:00');
+      return {
+        day: DAYS_PT[date.getDay()],
+        date: date.getDate(),
+        full: DAYS_FULL[date.getDay()]
+      };
+    }
+
+    async function loadSchedule() {
+      if (!token) {
+        showError();
+        return;
+      }
+
+      try {
+        const weekStart = currentWeekStart.toISOString().split('T')[0];
+        const response = await fetch(`${API_URL}/employee/schedule/${token}?week=${weekStart}`);
+
+        if (!response.ok) {
+          throw new Error('Invalid token');
+        }
+
+        scheduleData = await response.json();
+        renderSchedule();
+      } catch (error) {
+        console.error('Error loading schedule:', error);
+        showError();
+      }
+    }
+
+    function renderSchedule() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Update header info
+      document.getElementById('employee-name').textContent = scheduleData.employeeName || 'Funcionário';
+      document.getElementById('establishment-name').textContent = scheduleData.establishmentName || '-';
+      document.getElementById('week-range').textContent = formatWeekRange(currentWeekStart);
+
+      // Render shifts
+      const container = document.getElementById('shifts-container');
+      const emptyState = document.getElementById('empty-state');
+
+      const shifts = scheduleData.shifts || [];
+
+      // Filter shifts for current week
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const weekStartStr = currentWeekStart.toISOString().split('T')[0];
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+      const weekShifts = shifts.filter(s => s.date >= weekStartStr && s.date <= weekEndStr);
+
+      if (weekShifts.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+
+      // Sort by date
+      weekShifts.sort((a, b) => a.date.localeCompare(b.date));
+
+      container.innerHTML = `
+        <div class="card">
+          <div class="shift-list">
+            ${weekShifts.map(shift => {
+              const dateInfo = formatDate(shift.date);
+              return `
+                <div class="shift-item">
+                  <div class="shift-date">
+                    <div class="shift-day">${dateInfo.day}</div>
+                    <div class="shift-date-num">${dateInfo.date}</div>
+                  </div>
+                  <div class="shift-info">
+                    <div class="shift-time">${shift.startTime} - ${shift.endTime}</div>
+                    <div class="shift-label">${shift.shiftLabel || dateInfo.full}</div>
+                  </div>
+                  <span class="badge badge-success">Confirmado</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function showError() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('content').style.display = 'none';
+    }
+
+    // Navigation
+    document.getElementById('prev-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+      document.getElementById('week-range').textContent = formatWeekRange(currentWeekStart);
+      loadSchedule();
+    });
+
+    document.getElementById('next-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      document.getElementById('week-range').textContent = formatWeekRange(currentWeekStart);
+      loadSchedule();
+    });
+
+    // Initial load
+    loadSchedule();
+  </script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Troca de Turno - Escala Simples</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">Escala<span class="logo-accent">Simples</span></div>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Carregando...</p>
+    </div>
+
+    <div id="error" class="error-container" style="display: none;">
+      <div class="error-icon">😕</div>
+      <h2 class="error-title">Link inválido ou expirado</h2>
+      <p class="error-message">Este link de troca não é mais válido.</p>
+    </div>
+
+    <main id="content" style="display: none;">
+      <h1 class="page-title">Solicitação de Troca</h1>
+      <p class="page-subtitle" id="requester-name">-</p>
+
+      <div class="card mt-lg">
+        <div class="card-header">
+          <div class="card-title">Turno Solicitado</div>
+          <span class="badge badge-warning" id="status-badge">Pendente</span>
+        </div>
+
+        <div class="shift-list mt-md">
+          <div class="shift-item">
+            <div class="shift-date">
+              <div class="shift-day" id="shift-day">-</div>
+              <div class="shift-date-num" id="shift-date">-</div>
+            </div>
+            <div class="shift-info">
+              <div class="shift-time" id="shift-time">-</div>
+              <div class="shift-label" id="shift-label">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Detalhes</div>
+        <p class="mt-sm" id="swap-message">-</p>
+        <p class="card-subtitle mt-md" id="expires-at">Expira em: -</p>
+      </div>
+
+      <div class="btn-group" id="action-buttons">
+        <button class="btn btn-danger" id="decline-btn">
+          Recusar
+        </button>
+        <button class="btn btn-success" id="accept-btn">
+          Aceitar
+        </button>
+      </div>
+
+      <p class="text-center mt-md card-subtitle">
+        Ao aceitar, você assumirá este turno.
+      </p>
+    </main>
+
+    <div id="success-accept" class="success-container" style="display: none;">
+      <div class="success-icon">✅</div>
+      <h2 class="success-title">Troca Aceita!</h2>
+      <p class="success-message">Você assumiu o turno. Sua escala foi atualizada.</p>
+    </div>
+
+    <div id="success-decline" class="success-container" style="display: none;">
+      <div class="success-icon">👍</div>
+      <h2 class="success-title">Troca Recusada</h2>
+      <p class="success-message">Tudo bem! O solicitante será notificado.</p>
+    </div>
+
+    <div id="already-handled" class="success-container" style="display: none;">
+      <div class="success-icon">ℹ️</div>
+      <h2 class="success-title">Troca já resolvida</h2>
+      <p class="success-message">Esta solicitação de troca já foi respondida.</p>
+    </div>
+
+    <footer class="footer">
+      <p>Escala Simples &copy; 2026</p>
+    </footer>
+  </div>
+
+  <script>
+    const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const DAYS_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+    // Get token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || window.location.pathname.split('/').pop();
+
+    // API base URL
+    const API_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://api.escalasimples.com.br';
+
+    let swapData = null;
+
+    async function loadSwapRequest() {
+      if (!token) {
+        showError();
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/swap/${token}`);
+
+        if (!response.ok) {
+          throw new Error('Invalid token');
+        }
+
+        swapData = await response.json();
+
+        if (swapData.status !== 'pending') {
+          showAlreadyHandled();
+          return;
+        }
+
+        renderSwapRequest();
+      } catch (error) {
+        console.error('Error loading swap request:', error);
+        showError();
+      }
+    }
+
+    function renderSwapRequest() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+
+      // Update requester info
+      document.getElementById('requester-name').textContent =
+        `${swapData.requesterName} quer trocar um turno com você`;
+
+      // Update shift info
+      const shiftDate = new Date(swapData.shiftDate + 'T00:00:00');
+      document.getElementById('shift-day').textContent = DAYS_PT[shiftDate.getDay()];
+      document.getElementById('shift-date').textContent = shiftDate.getDate();
+      document.getElementById('shift-time').textContent =
+        `${swapData.startTime} - ${swapData.endTime}`;
+      document.getElementById('shift-label').textContent =
+        swapData.shiftLabel || DAYS_FULL[shiftDate.getDay()];
+
+      // Update message
+      document.getElementById('swap-message').textContent =
+        swapData.message || `${swapData.requesterName} precisa de alguém para cobrir este turno.`;
+
+      // Update expiry
+      if (swapData.expiresAt) {
+        const expiresAt = new Date(swapData.expiresAt);
+        const now = new Date();
+        const diffMs = expiresAt - now;
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins > 60) {
+          const diffHours = Math.floor(diffMins / 60);
+          document.getElementById('expires-at').textContent =
+            `Expira em ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+        } else if (diffMins > 0) {
+          document.getElementById('expires-at').textContent =
+            `Expira em ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+        } else {
+          document.getElementById('expires-at').textContent = 'Expirado';
+          document.getElementById('action-buttons').style.display = 'none';
+        }
+      }
+    }
+
+    async function respondToSwap(accept) {
+      const acceptBtn = document.getElementById('accept-btn');
+      const declineBtn = document.getElementById('decline-btn');
+      acceptBtn.disabled = true;
+      declineBtn.disabled = true;
+      acceptBtn.textContent = accept ? 'Aceitando...' : 'Aceitar';
+      declineBtn.textContent = accept ? 'Recusar' : 'Recusando...';
+
+      try {
+        const response = await fetch(`${API_URL}/swap/${token}/respond`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ accept }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to respond');
+        }
+
+        if (accept) {
+          showSuccessAccept();
+        } else {
+          showSuccessDecline();
+        }
+      } catch (error) {
+        console.error('Error responding to swap:', error);
+        alert('Erro ao responder. Tente novamente.');
+        acceptBtn.disabled = false;
+        declineBtn.disabled = false;
+        acceptBtn.textContent = 'Aceitar';
+        declineBtn.textContent = 'Recusar';
+      }
+    }
+
+    function showError() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('content').style.display = 'none';
+    }
+
+    function showSuccessAccept() {
+      document.getElementById('content').style.display = 'none';
+      document.getElementById('success-accept').style.display = 'block';
+    }
+
+    function showSuccessDecline() {
+      document.getElementById('content').style.display = 'none';
+      document.getElementById('success-decline').style.display = 'block';
+    }
+
+    function showAlreadyHandled() {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('already-handled').style.display = 'block';
+    }
+
+    // Event listeners
+    document.getElementById('accept-btn').addEventListener('click', () => respondToSwap(true));
+    document.getElementById('decline-btn').addEventListener('click', () => respondToSwap(false));
+
+    // Initial load
+    loadSwapRequest();
+  </script>
+</body>
+</html>

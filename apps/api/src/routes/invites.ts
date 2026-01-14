@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { db, collections } from '../services/firebase';
+import { collections } from '../services/firebase';
 import { requireAuth, requireEstablishment } from '../middleware/auth';
 import {
   sendEmployeeInvite,
@@ -78,20 +78,16 @@ router.post('/send', requireAuth, requireEstablishment, async (req: Request, res
       }
     }
 
-    // Create invite token
-    const { token, expiresAt } = await createInvite(body.employeeId, establishmentId);
-
-    // Send WhatsApp message
+    // Send WhatsApp invite with availability link
     const result = await sendEmployeeInvite(
       employee.phone,
       employee.name,
       establishment.name,
-      token
+      body.employeeId,
+      establishmentId
     );
 
     if (!result.success) {
-      // Delete the invite if message failed
-      await db.collection('invites').doc(token).delete();
       return res.status(500).json({
         error: 'Não foi possível enviar o convite via WhatsApp',
         details: result.error,
@@ -102,8 +98,6 @@ router.post('/send', requireAuth, requireEstablishment, async (req: Request, res
     await collections.employees.doc(body.employeeId).update({
       inviteStatus: 'sent',
       inviteSentAt: new Date(),
-      inviteToken: token,
-      inviteExpiresAt: expiresAt,
     });
 
     return res.json({
@@ -226,19 +220,16 @@ router.post('/send-bulk', requireAuth, requireEstablishment, async (req: Request
           continue;
         }
 
-        // Create invite token
-        const { token, expiresAt } = await createInvite(employeeId, establishmentId);
-
-        // Send WhatsApp message
+        // Send WhatsApp invite with availability link
         const result = await sendEmployeeInvite(
           employee.phone,
           employee.name,
           establishment.name,
-          token
+          employeeId,
+          establishmentId
         );
 
         if (!result.success) {
-          await db.collection('invites').doc(token).delete();
           results.push({ employeeId, success: false, error: result.error });
           continue;
         }
@@ -247,8 +238,6 @@ router.post('/send-bulk', requireAuth, requireEstablishment, async (req: Request
         await collections.employees.doc(employeeId).update({
           inviteStatus: 'sent',
           inviteSentAt: new Date(),
-          inviteToken: token,
-          inviteExpiresAt: expiresAt,
         });
 
         results.push({ employeeId, success: true });
@@ -391,28 +380,16 @@ router.post('/resend/:employeeId', requireAuth, requireEstablishment, async (req
       return res.status(403).json({ error: 'Funcionário não pertence a este estabelecimento' });
     }
 
-    // Invalidate old invite if exists
-    if (employee.inviteToken) {
-      await db.collection('invites').doc(employee.inviteToken).update({
-        used: true,
-        invalidatedAt: new Date(),
-        invalidatedReason: 'resend',
-      });
-    }
-
-    // Create new invite token
-    const { token, expiresAt } = await createInvite(employeeId, establishmentId);
-
-    // Send WhatsApp message
+    // Send WhatsApp invite with availability link
     const result = await sendEmployeeInvite(
       employee.phone,
       employee.name,
       establishment.name,
-      token
+      employeeId,
+      establishmentId
     );
 
     if (!result.success) {
-      await db.collection('invites').doc(token).delete();
       return res.status(500).json({
         error: 'Não foi possível enviar o convite via WhatsApp',
         details: result.error,
@@ -423,8 +400,6 @@ router.post('/resend/:employeeId', requireAuth, requireEstablishment, async (req
     await collections.employees.doc(employeeId).update({
       inviteStatus: 'sent',
       inviteSentAt: new Date(),
-      inviteToken: token,
-      inviteExpiresAt: expiresAt,
     });
 
     return res.json({

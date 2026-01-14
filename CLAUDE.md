@@ -550,3 +550,71 @@ function formatPhoneDisplay(value: string): string {
 const DAYS_PT = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 // Index matches JavaScript Date.getDay() (0 = Sunday)
 ```
+
+---
+
+## Ralph Framework Integration
+
+This project uses the Ralph autonomous development methodology. Key files:
+- `PROMPT.md` - Development instructions and context
+- `@fix_plan.md` - Prioritized task list (the @ prefix means Ralph control file)
+- `CLAUDE.md` - This file, serves as @AGENT.md equivalent
+- `specs/requirements.md` - Technical specifications
+
+### Feature Development Quality Standards
+
+**CRITICAL**: All new features MUST meet the following mandatory requirements before being considered complete.
+
+#### Testing Requirements
+- **Minimum Coverage**: 85% code coverage ratio required for all new code
+- **Test Pass Rate**: 100% - all tests must pass, no exceptions
+- **Coverage Validation**: Run coverage reports before marking features complete:
+  ```bash
+  npm run test:coverage
+  ```
+
+#### Git Workflow Requirements
+
+Before moving to the next feature, ALL changes must be:
+
+1. **Committed with Clear Messages**:
+   ```bash
+   git add .
+   git commit -m "feat(module): descriptive message following conventional commits"
+   ```
+   - Use conventional commit format: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`
+   - Include scope when applicable: `feat(api):`, `fix(mobile):`, `test(auth):`
+
+2. **Pushed to Remote Repository**:
+   ```bash
+   git push origin <branch-name>
+   ```
+
+3. **Branch Hygiene**:
+   - Work on feature branches, never directly on `main`
+   - Branch naming: `feature/<name>`, `fix/<name>`, `docs/<name>`
+
+#### Feature Completion Checklist
+
+Before marking ANY feature as complete in @fix_plan.md, verify:
+
+- [ ] All tests pass
+- [ ] Code coverage meets 85% minimum (for new code)
+- [ ] TypeScript strict mode passes (`npx tsc --noEmit`)
+- [ ] Code formatted and linted (`npm run lint`)
+- [ ] All changes committed with conventional commits
+- [ ] All commits pushed to remote
+- [ ] @fix_plan.md task marked as `[x]`
+- [ ] handover.md updated if significant change
+
+---
+
+## Key Documents
+
+| Document | Purpose |
+|----------|---------|
+| `PROMPT.md` | Ralph development instructions |
+| `@fix_plan.md` | Prioritized TODO list with progress |
+| `handover.md` | AI agent handover context |
+| `specs/requirements.md` | Technical specifications from PRD |
+| `PRD.md` (parent folder) | Full product requirements |
